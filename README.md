@@ -1,4 +1,4 @@
-我的个人博客
+个人博客模板--基于Jekyll+Github构建。
 ================
 
 ####博客地址
@@ -12,7 +12,7 @@ http://www.panxw.com
 5,删除_posts下文章，换成你自己的。  
 6,最后，push到你自己的博客Repo~  
 
- *^_^*如果愿意，Star本项目一个吧~  
+ *^_^*随喜Star一下本项目吧~  
 
 ####本项目使用了
 1,CNZZ的网站统计服务，官网：http://cnzz.com  
@@ -21,15 +21,6 @@ http://www.panxw.com
 如需查看或管理网站统计、评论或广告，请自行注册帐号并修改_includes目录下相关文件。  
 
 ####联系方式
-联系方式：qq(85902258), email(winfirm#163.com)  
-腾讯微博：http://t.qq.com/allthelucky  
-
-####使用本项目作模板的博客链接
-http://www.94geek.com  
-http://www.haidaoxiaofei.me  
-http://www.malphi.net  
-http://happyaround.com  
-http://tencentlocation.github.io  
-http://wtaps.github.io  
-http://www.youngben.net  
-(你的位置)  
+QQ：85902258  
+邮箱：email(winfirm#163.com)  
+Github：https://github.com/panxw  
