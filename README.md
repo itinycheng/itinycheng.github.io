@@ -2,7 +2,7 @@
 ================
 
 ####博客地址
-http://www.panxw.com  
+http://www.panxw.com, 支持PC与智能机访问。  
 
 ####使用本项目作为博客模板，仅需如下几步：
 1,首先Fork或Download一份本项目代码。  
@@ -12,15 +12,15 @@ http://www.panxw.com
 5,删除_posts下文章，换成你自己的。  
 6,最后，push到你自己的博客Repo~  
 
- *^_^*随喜Star一下本项目吧~  
-
 ####本项目使用了
 1,CNZZ的网站统计服务，官网：http://cnzz.com  
 2,友言的网友评论服务，官网：http://www.uyan.cc  
 3,Google 的Adsense广告，官网：https://www.google.com/adsense/login/zh_CN  
 如需查看或管理网站统计、评论或广告，请自行注册帐号并修改_includes目录下相关文件。  
 
-####联系方式
+####联系作者
 QQ：85902258  
 邮箱：email(winfirm#163.com)  
 Github：https://github.com/panxw  
+
+**^_^*随喜Star一下本项目吧，谢谢~  
