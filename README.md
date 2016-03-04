@@ -18,13 +18,6 @@ http://www.panxw.com, 支持PC与智能机访问。
 3,Google 的Adsense广告，官网：https://www.google.com/adsense/login/zh_CN  
 如需查看或管理网站统计、评论或广告，请自行注册帐号并修改_includes目录下相关文件。  
 
-####联系作者
-QQ：85902258  
-邮箱：email(winfirm#163.com)  
-Github：https://github.com/panxw  
-
-**^_^*随喜Star一下本项目吧，谢谢~  
-
 ####Author
 Blog: http://www.panxw.com  
 Linkedin: http://www.linkedin.com/in/panxw  
