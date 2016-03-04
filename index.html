@@ -1,6 +1,6 @@
 ---
-layout: default
-title: "首页：Home"
+layout: index
+title: "强学力行、顺势而为"
 ---
 <h1 class="page-header">
   <small>
@@ -15,7 +15,7 @@ title: "首页：Home"
   </a> 
   <div class="post-date">
 	<span class="glyphicon glyphicon-time"></span>
-	{{ post.date | date_to_string }}
+	{{ post.date | date:"%Y-%m-%d" }}
   </div>
 </h2>
 <hr>
@@ -28,20 +28,20 @@ title: "首页：Home"
 <ul class="pager">
   {% if paginator.previous_page %} {% if paginator.previous_page == 1 %}
   <li class="previous">
-    <a href="{{ site.url }}/">
-      &larr; Older
+    <a href="/">
+      &larr; 上一页
     </a>
   </li>
   {% else %}
   <li class="previous">
-    <a href="{{ site.url }}/page{{ paginator.previous_page }}">
-      &larr; Older
+    <a href="/posts/page{{ paginator.previous_page }}">
+      &larr; 上一页
     </a>
   </li>
   {% endif %} {% endif %} {% if paginator.next_page %}
   <li class="next">
-    <a href="{{ site.url }}/page{{ paginator.next_page }}">
-      Newer &rarr;
+    <a href="/posts/page{{ paginator.next_page }}">
+      下一页 &rarr;
     </a>
   </li>
   {% endif %}

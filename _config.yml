@@ -1,23 +1,22 @@
-markdown: redcarpet
-permalink: /:categories/:title.html
-url: 
-lsi: false
-pygments: true
-safe: true
-auto: false 
+markdown: kramdown
+highlighter: pygments
+permalink: /posts/id-:title.html
+excerpt_separator: "<!-- more -->"
+
+github: panxw
+author: "潘学文"
+name: "潘学文个人博客"
+description: ""
+url: http://www.panxw.com
+domain: panxw.com
 
 paginate: 8
-paginate_path: "page:num"
+paginate_path: "posts/page:num"
+timezone: America/Los_Angeles
 
-# presonal config
-domain: www.panxw.com
-title: Panxw's Blog
-description: Android, Cocos2d, Java Web, Linux, reading...
-author: Steven Pan
-email: winfirm#163.com
-github: panxw
+collections:
+  docs:
+    output: true
 
-config:
-  js_dir:
-  img_dir:
-  css_dir:
+gems:
+ - jekyll-paginate

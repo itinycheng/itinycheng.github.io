@@ -2,10 +2,24 @@
 layout: default
 title: "关于：About"
 ---
-####Basic Info
-My name is Pan Xuewen, A software developer on Android and Linux platform, I'm living in Hongshan, Wuhan, China.  
+Welcome to visit my blog!
 
-####Links
-Resume: <http://gurudigger.com/users/panxw/p?t=fc59f9c1>  
-GitHub: <https://github.com/{{ site.github }}>  
+#### 1.Personal Info
+Name: Xuewen Pan(潘学文)  
+Gender: Male  
+City: Wuhan, China  
+Career: Software developer(Android&Linux&Web)  
+
+
+#### 2.My Links
+Blog: <http://www.panxw.com>  
+GitHub: <https://github.com/panxw>  
 LinkedIn: <http://www.linkedin.com/in/panxw>  
+
+
+#### 3.Contract
+Email: winfirm#163.com  
+QQ: 85902258  
+
+#### 4.Message me!
+{% include comment.html %}

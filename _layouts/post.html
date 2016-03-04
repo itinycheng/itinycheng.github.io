@@ -5,16 +5,26 @@ layout: default
 <!-- Title -->
 <h2>
   {{ page.title }}
-  <div class="post-date"><a href="https://github.com/{{ site.github }}/{{ site.github }}.github.com/edit/master/{{ page.path }}" target="_blank">纠错</a>&nbsp;&nbsp;
+  <div class="post-date">
 	<span class="glyphicon glyphicon-time"></span>
-	{{ page.date | date_to_string }}
+	{{ page.date | date:"%Y-%m-%d" }}
   </div>
 </h2>
 <!-- Author -->
 <hr>
 {{ content }}
 <br/>
-<div style="margin-top:10px;margin-bottom:10px">
+<b>原创文章，转载请注明出处！</b>
+<br/>
+<b>本文链接：</b><a href="{{site.url}}{{page.url}}" title="{{page.name}}">{{site.url}}{{page.url}}</a>
+
+<!-- adsense_468x60 -->
+<div style="text-align:center;margin-top:15px;">
+	 {% include adsense_468x60.html %} 
+</div>
+
+<!-- next and previous -->
+<div style="margin-top:15px; margin-bottom:10px">
   {%if page.previous%}
   <span class="next">
     上篇：
@@ -24,12 +34,14 @@ layout: default
   </span>
   {%endif%} 
   {%if page.next%}
-  <span class="prev">
+  <div style="float:right">
+  <span class="prev" >
     下篇：
     <a href="{{page.next.url}}">
       {{page.next.title}}
     </a>
   </span>
+  </div>
   {%endif%}
 </div>
 <hr>
