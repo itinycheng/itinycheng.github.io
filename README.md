@@ -18,21 +18,9 @@ http://www.panxw.com, 支持PC与智能机访问。
 3,Google 的Adsense广告，官网：https://www.google.com/adsense/login/zh_CN  
 如需查看或管理网站统计、评论或广告，请自行注册帐号并修改_includes目录下相关文件。  
 
-####Author
-Blog: http://www.panxw.com  
-Linkedin: http://www.linkedin.com/in/panxw  
-QQ: 85902258  
+####联系作者
+QQ：85902258  
+邮箱：email(winfirm#163.com)  
+Github：https://github.com/panxw  
 
-## License
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+**^_^*随喜Star一下本项目吧，谢谢~  

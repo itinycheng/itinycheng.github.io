@@ -1,37 +1,9 @@
-          <ul class="nav navbar-nav">
-            <li>
-              <a href="/posts/android.html">
-                Android开发
-              </a>
-            </li>
-            <li>
-              <a href="/posts/program.html">
-                软件编程
-              </a>
-            </li>
-            <li>
-              <a href="/posts/web.html">
-                Web建站
-              </a>
-            </li>
-            <li>
-              <a href="/posts/linux.html">
-                Linux相关
-              </a>
-            </li>
-            <li>
-              <a href="/posts/read.html">
-                读书笔记
-              </a>
-            </li>
-            <li>
-              <a href="/posts/other.html">
-                杂记
-              </a>
-            </li>
-            <li>
-              <a href="/about.html">
-                关于
-              </a>
-            </li>
-          </ul>
+		<ul class="nav navbar-nav">
+			{% for cat in site.all_categories %}
+				<li>
+				  <a href="{{cat[2]}}">
+					{{cat[1]}}
+				  </a>
+				</li>
+			{% endfor %}
+		</ul> 
