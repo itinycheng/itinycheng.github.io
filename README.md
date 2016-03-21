@@ -1,13 +1,13 @@
 Jekyll模板
 ================
 
-1. 浏览
+#### 1.浏览  
 http://www.panxw.com, 支持PC与智能机访问。  
 
-2. 模板使用
+#### 2.模板使用  
 修改_config.yml与_include目录下相关文件进行配置统计。  
 
-3. 联系作者
+#### 3.联系作者
 QQ：85902258  
 邮箱：email(winfirm#163.com)  
 Github：https://github.com/panxw  
