@@ -1,4 +1,4 @@
-Jekyll模板
+Jekyll博客模板
 ================
 
 #### 1.浏览  
@@ -9,7 +9,7 @@ http://www.panxw.com, 支持PC与智能机访问。
 
 #### 3.联系作者
 QQ：85902258  
-邮箱：email(winfirm#163.com)  
+邮箱：winfirm#163.com  
 Github：https://github.com/panxw  
 
 
