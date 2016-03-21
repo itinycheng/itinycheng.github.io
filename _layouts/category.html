@@ -1,21 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="{{ page.title }} - {{ site.name }} - 作者:{{ site.author }}">
-    <title>
-		{% for cat in site.all_categories %}
-			{% if page.category == cat[0] %}
-				栏目：{{cat[1]}} - {{ site.name }}
-			{% endif %}
-		{% endfor %}
-    </title>
+    <meta charset="utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name="description" content="{{ page.title }} - {{ site.name }} - 作者:{{ site.author }}"/>
+    <title>{% for cat in site.all_categories %}{% if page.category == cat[0] %}栏目：{{cat[1]}} - {{ site.name }}{% endif %}{% endfor %}</title>
     <!-- Bootstrap Core CSS -->
-    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/bootstrap.min.css" rel="stylesheet"/>
     <!-- Custom CSS -->
-    <link href="/css/blog.css" rel="stylesheet">
+    <link href="/css/blog.css" rel="stylesheet"/>
     <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media
     queries -->
     <!-- WARNING: Respond.js doesn't work if you view the page via file://
@@ -67,15 +61,10 @@
         <!-- Blog Entries Column -->
         <div class="col-md-8">
 			<!-- Navi -->
-			{% for cat in site.all_categories %}
-				{% if page.category == cat[0] %}
-					<a href="/">首页</a>&nbsp;>&nbsp;<a href="{{cat[2]}}">{{cat[1]}}</a>&nbsp;>&nbsp;栏目
-				{% endif %}
-			{% endfor %}
-
+			{% for cat in site.all_categories %}{% if page.category == cat[0] %}<a href="/">首页</a>&nbsp;>&nbsp;<a href="{{cat[2]}}">{{cat[1]}}</a>&nbsp;>&nbsp;列表{% endif %}{% endfor %}
 			<!-- List -->
 			<ul class="list-unstyled">
-			{% for post in site.categories[page.category]  %}
+			{% for post in site.categories[page.category] %}
 			  {% capture y %}{{post.date | date:"%Y"}}{% endcapture %}
 			  {% if year != y %}
 				{% assign year = y %}
