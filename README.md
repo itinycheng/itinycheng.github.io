@@ -5,7 +5,7 @@ Jekyll博客模板
 http://www.panxw.com, 支持PC与智能机访问。  
 
 #### 2.模板使用
-修改_config.yml与_includes目录下相关文件进行配置统计。  
+修改_config.yml与_includes目录下相关文件进行配置。  
 评论代码推荐“多说”，统计代码推荐cnzz。  
 模板随意使用，但请保留本站友情链接。  
 
