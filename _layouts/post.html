@@ -12,16 +12,21 @@ layout: default
 </div>
 <br/>
 <hr>
-{{ content }}
-<br/>
-<b>原创文章，转载请注明出处！</b>
-<br/>
-<b>本文链接：</b><a href="{{site.url}}{{page.url}}" title="{{page.name}}">{{site.url}}{{page.url}}</a>
-
 <!-- adsense_468x60 -->
 <div style="text-align:center;margin-top:15px;">
 	 {% include adsense_468x60.html %} 
 </div>
+<br/>
+
+<!-- content -->
+<div style="text-indent:2em;">
+{{ content }}
+</div>
+
+<br/>
+<b>原创文章，转载请注明出处！</b>
+<br/>
+<b>本文链接：</b><a href="{{site.url}}{{page.url}}" title="{{page.name}}">{{site.url}}{{page.url}}</a>
 
 <!-- next and previous -->
 <div style="margin-top:15px; margin-bottom:10px">

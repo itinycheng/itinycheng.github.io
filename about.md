@@ -1,5 +1,5 @@
 ---
-layout: default
+layout: page
 title: "关于：About"
 ---
 Welcome to visit my blog!
@@ -26,6 +26,3 @@ fangxinyu.com
 maicaiwa.com  
 babytoycar.com  
 youth168.com  
-
-<hr/>
-{% include comment.html %}
