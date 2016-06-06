@@ -10,8 +10,7 @@ http://www.panxw.com, 支持PC与智能机访问。
 模板可任意使用，但请保留本站友情链接。  
 
 #### 3.联系作者
-QQ：85902258  
-邮箱：winfirm#163.com  
+QQ交流群: 168563980  
 Github：https://github.com/panxw  
 
 
