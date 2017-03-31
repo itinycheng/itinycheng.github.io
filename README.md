@@ -13,6 +13,11 @@ http://www.panxw.com, 支持PC与智能机访问。
 QQ交流群: 168563980  
 Github：https://github.com/panxw  
 
+#### 4.捐助
+![Doate](http://o83o7w0hk.bkt.clouddn.com//donate_qr/donate_alipay.jpg)  
+![Doate](http://o83o7w0hk.bkt.clouddn.com//donate_qr/donate_weixin.jpg)
+
+
 
 ## License
 
