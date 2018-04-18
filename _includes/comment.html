@@ -1,1 +1,17 @@
-请修改_includes/comment.html添加评论代码。
+  <div id="git_comment" style="margin:0px 10px"></div>
+  <script src="https://panxw.github.io/gitment/dist/gitment.browser.js"></script>
+  <script>
+    var clientId = 'f43a2ab223f20dc0ad20'
+    var clientSecret = 'f31ae38f1040879c4b67698ca47b53b9b668f284'
+    var gitment = new Gitment({
+      id: window.location.pathname,
+      owner: 'panxw',
+      repo: 'gitment',
+      oauth: {
+        client_id: clientId,
+        client_secret: clientSecret,
+      },
+    })
+
+    gitment.render('git_comment')
+  </script>

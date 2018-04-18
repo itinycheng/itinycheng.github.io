@@ -1,31 +1,44 @@
 markdown: kramdown
-highlighter: pygments
-permalink: /posts/:title.html
+highlighter: rouge
+permalink: /:categories/:title.html 
 excerpt_separator: "<!-- more -->"
 
 github: panxw
-author: "潘学文"
+author: "panxw"
 email: winfirm#163.com
-name: "潘学文个人博客"
+name: "Panxw's Blog"
+baseurl: /
 url: http://www.panxw.com
 domain: www.panxw.com
+
 all_categories: [
-["android", "Android开发","/posts/android.html"], 
-["program", "软件编程","/posts/program.html"],
-["web", "Web建站","/posts/web.html"], 
-["linux", "Linux相关","/posts/linux.html"],
-["read", "读书笔记","/posts/read.html"], 
-["other", "杂记","/posts/other.html"],
-["about", "关于","/about.html"]
+  ["android", "Android开发","/android/index.html"], 
+  ["react", "React Native", "/react/index.html"],
+  ["web", "Web建站","/web/index.html"], 
+  ["linux", "Linux相关","/linux/index.html"],
+  ["git", "git用法","/git/index.html"],
+  ["program", "软件开发","/program/index.html"],
+  ["vps", "VPS","/vps/index.html"],
+  ["other", "杂记","/other/index.html"],
+  ["read", "书摘","/read/index.html"], 
+  ["about", "关于","/about.html"]
 ]
 
-paginate: 8
-paginate_path: "posts/page:num"
-timezone: America/Los_Angeles
+paginate: 10 
+paginate_path: "index_:num"
+
+index_layout: "index.html"
+category_layout: "_layouts/category.html"
+tag_layout: "_layouts/tag.html"
+
+#不使用gems库中的jekyll-paginate-category
+#使用基于jekyll-paginate改写的的栏目分页插件，所以jekyll-paginate还需要用上。
+#gems: [jekyll-paginate,jekyll-paginate-category]
+gems: [jekyll-paginate]
 
 collections:
   docs:
     output: true
 
-gems:
- - jekyll-paginate
+copyright: []
+#timezone: Asia/Shanghai
