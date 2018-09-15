@@ -1,30 +1,27 @@
 markdown: kramdown
 highlighter: rouge
-permalink: /:categories/:title.html 
+permalink: /:categories/:title.html
 excerpt_separator: "<!-- more -->"
 
-github: panxw
-author: "panxw"
-email: winfirm#163.com
-name: "Panxw's Blog"
+github: itinycheng
+author: "tiny"
+email: tiny_wcl#163.com
+name: "Tiny's Blog"
 baseurl: /
-url: http://www.panxw.com
-domain: www.panxw.com
+url: https://itinycheng.github.io
+domain: itinycheng.github.io
 
 all_categories: [
-  ["android", "Android开发","/android/index.html"], 
-  ["react", "React Native", "/react/index.html"],
-  ["web", "Web建站","/web/index.html"], 
-  ["linux", "Linux相关","/linux/index.html"],
-  ["git", "git用法","/git/index.html"],
-  ["program", "软件开发","/program/index.html"],
-  ["vps", "VPS","/vps/index.html"],
-  ["other", "杂记","/other/index.html"],
-  ["read", "书摘","/read/index.html"], 
-  ["about", "关于","/about.html"]
+  ["language", "Programing Language","/lang/index.html"],
+  ["web", "Web Framework", "/web/index.html"],
+  ["bigdata", "Big Data","/bigdata/index.html"],
+  ["requirement", "Requirement","/requirement/index.html"],
+  ["read", "Reading Notes","/read/index.html"],
+  ["other", "Other","/other/index.html"],
+  ["about", "About Me","/about.html"]
 ]
 
-paginate: 10 
+paginate: 10
 paginate_path: "index_:num"
 
 index_layout: "index.html"
