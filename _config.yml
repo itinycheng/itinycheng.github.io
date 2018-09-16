@@ -12,7 +12,7 @@ url: https://itinycheng.github.io
 domain: itinycheng.github.io
 
 all_categories: [
-  ["language", "编程语言","/lang/index.html"],
+  ["lang", "编程语言","/lang/index.html"],
   ["web", "WEB相关", "/web/index.html"],
   ["bigdata", "大数据","/bigdata/index.html"],
   ["requirement", "需求文档","/requirement/index.html"],

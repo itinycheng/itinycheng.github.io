@@ -1,4 +1,4 @@
-tiny's blog -- 基于Jekyll+Github构建
+tiny's blog
 ================
 
 #### 博客地址
@@ -18,11 +18,11 @@ http://www.panxw.com, 支持PC与智能机访问。
 但由于自己是个非资深githuber所以就直接选择的用Github Pages，并fork知名博客模版[panxw](https://github.com/panxw/panxw.github.com)
 来建设自己的博客小站。
 
-从0到1做一件事并不是一件很容易的事情，因为需要关注各种问题；
-从1到100也不是一件容易的事情因为需要持续不断的努力和坚持；
-本次创建博客对自己而言是一次从0到1的过程，未来希望可以有1到100的机会；
-叮嘱：不需要有高频率高质量的输出，但希望可以持续坚持，养成习惯；
+- 从0到1做一件事并不是一件很容易的事情，因为需要关注各种问题；
+- 从1到100也不是一件容易的事情因为需要持续不断的努力和坚持；
+- 本次创建博客对自己而言是一次从0到1的过程，未来希望可以有1到100的机会；
+- 叮嘱：不需要有高频率高质量的输出，但希望可以持续坚持，养成习惯；
 
 #### 联系我
-Emall：tiny_wcl#163.com
-Github：https://github.com/itinycheng
+- Emall：tiny_wcl#163.com
+- Github：https://github.com/itinycheng

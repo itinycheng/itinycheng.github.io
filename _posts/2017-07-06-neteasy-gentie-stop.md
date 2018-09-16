@@ -2,9 +2,10 @@
 layout: post
 title: "忧伤，网易云跟贴8月1日将停止服务!"
 date: 2017-07-06 00:01:01
-category: web
+category: lang
 tags: [netEast,https]
 ---
+
 晚上浏览博客时，发现网友新的留言，于是点开浏览器收藏下的网易云跟贴（https://gentie.163.com/）准备进后台看看，不料刚进云跟贴首页，就弹出一个大大的8.1日停服通告<!-- more -->  
 
 整个人一惊，这才把留言插件从多说换到网易云跟贴不到2个月吧，说要停服就要停了，这世界怎么了？
@@ -14,3 +15,21 @@ tags: [netEast,https]
 畅言？要备案号，扯淡！
 
 没啥可用的了？！
+
+```java
+public static void main(String[] args) {
+  System.out.println("a");
+  System.out.println("a");
+}
+
+```
+
+{% highlight ruby %}
+def show
+  @widget = Widget(params[:id])
+  respond_to do |format|
+    format.html # show.html.erb
+    format.json { render json: @widget }
+  end
+end
+{% endhighlight %}
