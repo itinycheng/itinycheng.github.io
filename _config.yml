@@ -12,13 +12,15 @@ url: https://itinycheng.github.io
 domain: itinycheng.github.io
 
 all_categories: [
-  ["language", "Programing Language","/lang/index.html"],
-  ["web", "Web Framework", "/web/index.html"],
-  ["bigdata", "Big Data","/bigdata/index.html"],
-  ["requirement", "Requirement","/requirement/index.html"],
-  ["read", "Reading Notes","/read/index.html"],
-  ["other", "Other","/other/index.html"],
-  ["about", "About Me","/about.html"]
+  ["language", "编程语言","/lang/index.html"],
+  ["web", "WEB相关", "/web/index.html"],
+  ["bigdata", "大数据","/bigdata/index.html"],
+  ["requirement", "需求文档","/requirement/index.html"],
+  ["read", "读书笔记","/read/index.html"],
+  ["other", "其他内容","/other/index.html"],
+  ["archive", "时间轴","/archives.html"],
+  ["tag", "标签云","/tags.html"],
+  ["about", "关于","/about.html"]
 ]
 
 paginate: 10
