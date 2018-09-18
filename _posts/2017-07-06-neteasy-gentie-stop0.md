@@ -3,7 +3,7 @@ layout: post
 title: "忧伤，网易云跟贴8月1日将停止服务!"
 date: 2017-07-06 00:01:01
 category: lang
-tags: [netEast,https]
+tags: [test,dsdfsd,https]
 ---
 
 晚上浏览博客时，发现网友新的留言，于是点开浏览器收藏下的网易云跟贴（https://gentie.163.com/）准备进后台看看，不料刚进云跟贴首页，就弹出一个大大的8.1日停服通告<!-- more -->  
@@ -15,21 +15,17 @@ tags: [netEast,https]
 畅言？要备案号，扯淡！
 
 没啥可用的了？！
+**出题**
+*fdsfds*
 
 ```java
-public static void main(String[] args) {
-  System.out.println("a");
-  System.out.println("a");
+// content
+/**
+ * @author tiny
+ **/
+public class Te{
+public static final String fds = new String();
+  private String name;
+  private Integer age;
 }
-
 ```
-
-{% highlight ruby %}
-def show
-  @widget = Widget(params[:id])
-  respond_to do |format|
-    format.html # show.html.erb
-    format.json { render json: @widget }
-  end
-end
-{% endhighlight %}
