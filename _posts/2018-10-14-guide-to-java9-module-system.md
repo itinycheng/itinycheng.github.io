@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "java9模块化实操指南&工具使用"
+title:  "Java9模块化实操指南&工具使用"
 categories: Jigsaw
 tags:  Jigsaw modularity
 author: tiny
@@ -90,7 +90,6 @@ author: tiny
 ```
 
 ## 工具使用
-
 ### Java & Javac
 
 可以通过`java -h`, `javac --help`查看所有与模块化相关的命令；
@@ -99,7 +98,9 @@ author: tiny
 - `java -d <moduleName>` or `java --describe-module <moduleName>`：描述模块，`moddule-info.java`中定义的信息；  
 
 - 打包一个模块  
+
   - 手动打包模块：
+
   ```
   // 首先编译源码  
   > cd maven-java9-jigsaw
