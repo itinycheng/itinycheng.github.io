@@ -19,7 +19,7 @@ author: tiny
 
 ![module graph](../images/posts/module-graph.png)
 
-### 语法说明
+### 语法详解
 
 - Java9模块化代码编写的核心类是`module-info.java`，该类必须在模块的根路径上定义（例如：maven项目中可以将`module-info.java`放置在`main\src\java`下）；
 
@@ -53,7 +53,7 @@ author: tiny
   requires transitive java.desktop;
 
   // 对java.xml的依赖在编译期必须，运行期非必须，
-  // TODO 类似maven中的<scope>provided<scope> ? 使用Jlink插件打包时的效果是？
+  // 类似maven中的<scope>provided<scope>，使用Jlink打包的jimage不包含java.xml的文件
   requires static java.xml;
 
   // 将当前模块指定包中的public类（包含用public/protected修饰的嵌套类）exports（公布），供给外部模块访问；
@@ -128,11 +128,13 @@ author: tiny
 `-m` or `--module`：指定要执行的模块 & 要执行的main函数所在的类；
 
 ### Jlink
-用`Jlink`创建一种名为`jimage`的镜像文件，可直接运行，无需JDK环境；`jimage`可以有效减小运行时镜像（剔除了无依赖的`java module`）；
+- 用`Jlink`创建一种名为`jimage`的镜像文件，可直接运行，无需JDK环境；`jimage`可以有效减小运行时镜像（剔除了无依赖的`java module`）；
+- `Jlink`使用时要求当前项目以及其所依赖的所有jar都有`module-info.java`文件（针对无`module-inf.java`的jar存在的场景解决的解决方案可关注视频靠后一部分的讲解： [https://youtu.be/jpi2i1d7hqc](https://youtu.be/jpi2i1d7hqc)）；
 
 生成`jimage`示例：
 ```
 > cd maven-java9-jigsaw
+> mvn clean package -DskipTests
 > jlink
   --module-path libs
   --add-modules calculator.gui,calculator.cli
