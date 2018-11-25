@@ -56,5 +56,9 @@ tag_dir: tag/
 excerpt_separator: "\n\n\n\n"
 
 # paginate
-gems: [jekyll-paginate]
+gems: [jekyll-paginate, jekyll-mermaid]
 paginate: 6
+
+# graph mermaid
+mermaid:
+  src: '/js/mermaid.min.js'

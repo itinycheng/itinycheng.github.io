@@ -186,14 +186,19 @@ author: tiny
 - 针对`java module`的工程来讲，maven仍是作为jar包管理&打包的工具，但java模块间的依赖管理&类访问约束是依赖`java module system`管理；
 - maven中有提供`plugin`用于方便的编译&打包`java module`，但是`alpha`版本，尚未release `GA`；
 - 一个`JPMS` vs `maven`的传送门：
-https://stackoverflow.com/questions/39844602/project-jigsaw-vs-maven
+[https://stackoverflow.com/questions/39844602/project-jigsaw-vs-maven](https://stackoverflow.com/questions/39844602/project-jigsaw-vs-maven)
 
 
 ## 模块化DEMO练习
-可参照工程：https://github.com/itinycheng/maven-java9-jigsaw
+可参照工程：[https://github.com/itinycheng/maven-java9-jigsaw](https://github.com/itinycheng/maven-java9-jigsaw)
+
 
 ## 总结
 本章主要目的是讲解模块化的入门实操和模块化相关的工具使用，经过本章的学习相信大家可以顺利的在自己项目中引入模块化开发。为更方便直观的学习，我Fork了一个比较好的模块化Demo，并修改了原项目中的错误 & 升级Java版本到11，大家可以在该项目基础上做些实操练习，巩固所学，项目地址： https://github.com/itinycheng/maven-java9-jigsaw。
+
+**addition:**  
+`JPMS`特性引入之后，`Java`在运行时也能获取`Module`相关信息，具体可关注`Class.java`中新增的变量/方法，比如：`clazz.getModule()`,`clazz.forName(module, name)`, etc.
+
 
 ## 参考
 
