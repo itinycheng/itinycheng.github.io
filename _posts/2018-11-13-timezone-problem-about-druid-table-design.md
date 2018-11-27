@@ -4,7 +4,6 @@ title:  "多时区的数据写入同一张Druid表带来的一些问题思考"
 categories: product-design
 tags:  timezone druid analytics
 author: tiny
-mermaid: true
 ---
 
 * content
