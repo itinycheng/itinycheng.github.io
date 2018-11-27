@@ -101,18 +101,18 @@ author: tiny
 
   - 手动打包模块：
 
-  ```
-  // 首先编译源码  
+  ```shell
+  # 首先编译源码  
   > cd maven-java9-jigsaw
   > javac
     --module-path fd-java9-jigsaw-algorithm-api/src/main/java
     -d classes/api
-    fd-java9-jigsaw-algorithm-api\src\main\java\nl\frisodobber\java9\jigsaw\calculator\algorithm\api\Algorithm.java
+    fd-java9-jigsaw-algorithm-api/src/main/java/nl/frisodobber/java9/jigsaw/calculator/algorithm/api/Algorithm.java
   ```
 
-  ```
-  // 其次打包jar文件
-  // TODO 需将下述cmd替换上一步打编译的内容
+  ```shell
+  # 其次打包jar文件
+  # TODO 需将下述cmd替换上一步打编译的内容
   > jar --create
       --file target/jpms-hello-world.jar
       --main-class org.codefx.demo.jpms.HelloModularWorld
@@ -132,7 +132,7 @@ author: tiny
 - `Jlink`使用时要求当前项目以及其所依赖的所有jar都有`module-info.java`文件（针对无`module-inf.java`的jar存在的场景解决的解决方案可关注视频靠后一部分的讲解： [https://youtu.be/jpi2i1d7hqc](https://youtu.be/jpi2i1d7hqc)）；
 
 生成`jimage`示例：
-```
+```shell
 > cd maven-java9-jigsaw
 > mvn clean package -DskipTests
 > jlink
@@ -143,7 +143,7 @@ author: tiny
 ```
 
 运行`jimage`：
-```
+```shell
 > cd jimage/bin
 > java -m calculator.gui/nl.frisodobber.java9.jigsaw.calculator.gui.Main
 ```
@@ -153,8 +153,8 @@ author: tiny
 // TODO diff between jmod and jar, how to use jmod;
 
 生成jmod文件：
-```
-// 将jar转换成jmod文件
+```shell
+# 将jar转换成jmod文件
 > cd libs
 > jmod
   create calculator.gui
@@ -164,7 +164,7 @@ author: tiny
 ### Jdeps
 依赖对象分析工具，可分析模块相关依赖信息，具体命令可通过`jdeps -h`查看，简单示例：
 
-```
+```shell
 > cd libs
 > jdeps
   --module-path libs
