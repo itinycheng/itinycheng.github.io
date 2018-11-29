@@ -15,8 +15,9 @@ type: page
 
 ## 联系我
 
-* GitHub：[itinycheng](https://github.com/itinytheng)
 * tiny.wcl@gmail.com
+* GitHub: [https://github.com/itinytheng](https://github.com/itinytheng)
+* Twitter:  [https://twitter.com/tiny20732103](https://twitter.com/tiny20732103)
 
 ## 关于本站
 
