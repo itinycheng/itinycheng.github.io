@@ -369,9 +369,7 @@ def test2[T](list: List[T])(implicit ev: T <:< Fruit): Unit = {
 
   ```
 
-### 协变（covariant）
-### 不变（invariance）
-### 逆变（contravariance）
+### 协变（covariant）、 不变（invariance）、逆变（contravariance）
 
 `scala`的`协变`、`逆变`、`不变`的特性相比较其他更为的难理解，计划单独新开一篇文详细对比讲解；感兴趣的小伙伴们可以移驾：
 
