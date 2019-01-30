@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "系统讲解Scala&Java的协变与逆变"
+title:  "Scala&Java的协变与逆变"
 categories: generic
 tags:  generic scala covariant contravariance
 author: tiny
@@ -73,7 +73,7 @@ A(Class A) -->|extends| B(Class B)
 
 ```mermaid
 graph LR
-A(Box &lt; A &gt;) -->|extends| B(Box &lt; B &gt;)
+A(Box &lt A &gt) -->|extends| B(Box &lt B &gt)
 ```
 
 **注：**：Java中的数组是协变的，如下列Java代码可正常编译，但运行时会抛出`ArrayStoreException`：
@@ -110,7 +110,7 @@ A(Class A) -->|extends| B(Class B)
 
 ```mermaid
 graph LR
-B(BoxVisitor &lt; B &gt;) -->|extends| A(BoxVisitor &lt; A &gt;)
+B(BoxVisitor &lt B &gt) -->|extends| A(BoxVisitor &lt A &gt)
 ```
 
 ## Scala语法讲解
