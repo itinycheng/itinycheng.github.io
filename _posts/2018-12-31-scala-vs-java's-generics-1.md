@@ -373,7 +373,7 @@ def test2[T](list: List[T])(implicit ev: T <:< Fruit): Unit = {
 
 `scala`的`协变`、`逆变`、`不变`的特性相比较其他更为的难理解，计划单独新开一篇文详细对比讲解；感兴趣的小伙伴们可以移驾：
 
-TODO...
+https://itinycheng.github.io/2019/01/30/scala-vs-java's-generics-2/
 
 ## 总结
 
@@ -391,3 +391,4 @@ TODO...
 - [http://hongjiang.info/scala-type-contraints-and-specialized-methods/](http://hongjiang.info/scala-type-contraints-and-specialized-methods/)
 - [https://docs.scala-lang.org/tutorials/FAQ/context-bounds.html](https://docs.scala-lang.org/tutorials/FAQ/context-bounds.html)
 - [https://www.zhihu.com/question/35339328](https://www.zhihu.com/question/35339328)
+- [https://stackoverflow.com/questions/2723397/what-is-pecs-producer-extends-consumer-super](https://stackoverflow.com/questions/2723397/what-is-pecs-producer-extends-consumer-super)
