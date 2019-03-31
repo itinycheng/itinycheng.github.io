@@ -12,7 +12,7 @@ author: tiny
 
 ## 前言
 
-`Flink`是由公司前辈引入，最初版本是`Flink 1.1.5`，后升级到`Flink 1.3.2`一直以来`Flink Job`都是跑在`Standalone`集群上的，为规避`Standalone`集群中`Job`相互影响的问题（`Standalone`无法做资源隔离），前辈们又新做了一个`Flink`集群，将互相影响的`Job`拆分到不同集群中，这时团队内部有两个`Flink Standalone`集群，虽然解决了部分`Job`互相影响的问题，但新集群是和`Kafka`，`Druid`部署在同一台物理机器的（不同进程），也出现过几次不同进程互相影响的问题；这些`Flink Standalone`集群维护/升级起来也挺麻烦的，同时新`Job`越来越多，生活苦不堪言~.~；兄弟们从2018年初就喊着`OnYarn`，结果由于人力、机器、业务迭代等各种问题一拖再拖；到2018年底终于开始了这项工作，虽然只1个人力投入，经历2-3个月的时间团队的`streaming Job`已经稳定运行在`OnYarn`模式下，本文就重点记录下这段时所遇到的一些重点问题，当前生产运行版本是`Flink 1.7.1 + Hadoop 3.1.0`
+`Flink`是由公司前辈引入，最初版本是`Flink 1.1.5`，后升级到`Flink 1.3.2`一直以来`Flink Job`都是跑在`Standalone`集群上的，为规避`Standalone`集群中`Job`相互影响的问题（`Standalone`无法做资源隔离），前辈们又新做了`Flink`集群，将互相影响的`Job`拆分到不同集群中，这时团队内部有多个`Flink Standalone`集群，虽然解决了部分`Job`互相影响的问题，但有些服务是和`Kafka`，`Druid`部署在同一台物理机器的（不同进程），又出现过几次不同服务互相影响的情况；这些`Flink Standalone`集群维护/升级起来也挺麻烦的，同时新`Job`越来越多，生活苦不堪言~.~；兄弟们从2018年初就喊着`OnYarn`，结果由于人力、机器、业务迭代等各种问题一拖再拖；到2018年底终于开始了这项工作，虽然只1个人力投入，经历2-3个月的时间团队的`streaming Job`已经稳定运行在`OnYarn`模式下，本文就重点记录下这段时所遇到的一些重点问题，当前生产运行版本是`Flink 1.7.1 + Hadoop 3.1.0`
 
 ## 问题汇总
 
@@ -204,14 +204,111 @@ public static void destroy() {
 
 `OnYarn`的`Flink Job`重启时候是不会释放`Container`并重新申请的，自动重启前后的`JobId`保持不变；
 `Standalone`模式下，User code的是在`TaskManager`环境中加载启动的用的`ClassLoader`是：`org.apache.flink.runtime.execution.librarycache.FlinkUserCodeClassLoader`；
-`OnYarn`模式下（bin/flink run -m yarn-cluster），`User Code`和`Flink Framework`一并提交到`Container`中，`User Code`加载用的`ClassLoader`是：`sun.misc.Launcher$AppClassLoader`；
+`OnYarn`模式下（`bin/flink run -m yarn-cluster`），`User Code`和`Flink Framework`一并提交到`Container`中，`User Code`加载用的`ClassLoader`是：`sun.misc.Launcher$AppClassLoader`；
 由于`ClassLoader`不同，导致`User Code`卸载时机不同，也就导致在`OnYarn`模式下`Restart Job`，`DubboService`初始化异常；
 
 可参考Flink Docs：https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/debugging_classloading.html
 
-### taskmanager.numberOfTaskSlots配置
+**注：** `coding`时候尽量用`RichFunction` 的`open()/close()`方法初始化对象，尽可能用（单例）对象持有各种资源，而不要用`static`，其生命周期不可控；
 
-### OnYarn下log的打印 ？？
+### taskmanager.network.numberOfBuffers配置
+
+解决该问题需要对Flink的Task数据交换&内存管理有深刻的理解，可参考文章：
+[https://cwiki.apache.org/confluence/display/FLINK/Data+exchange+between+tasks](https://cwiki.apache.org/confluence/display/FLINK/Data+exchange+between+tasks)
+
+**环境：**
+
+`Job`的运行`Topology`图：
+```mermaid
+graph LR
+A(Task-Front `parallelism:30`) -->|shuffle| D(Task-End `parallelism:90`)
+```
+`Task-Front`负责从Kafka读取数据、清洗、校验、格式化，其并行度为30；
+`Task-End`负责数据的解析&处理，并发送到不同的`Kafka Topic`；
+`Task-Front`并行度为30，`Task-End`并行度为90；
+`Task-Front`通过网络IO将数据传递给`Task-End`；
+
+Job压测环境：
+`Flink 1.3.2`的`Standalone`模式；
+2个`JobManager`高可用；
+8个`TaskManager`（一台物理机一个`TaskManager`），主要配置如下：
+```yaml
+taskmanager.numberOfTaskSlots: 13
+taskmanager.network.numberOfBuffers: 10240
+taskmanager.memory.segment-size: 32768   # 32K
+taskmanager.memory.size: 15g
+```
+
+**问题：**
+在`Standalone`下由于`taskmanager.network.numberOfBuffers`配置数量过小导致`data exchange buffer`不够用，消费`Kafka`数据的速度减缓并出现大幅度的抖动，严重情况下导致`FlinkKafkaConsumer`停止消费数据，从`JMX`监控看到如下现象：
+：
+![buffer-1](/images/posts/flink/task-buffer-1.png)
+![buffer-2](/images/posts/flink/task-buffer-2.png)
+![buffer-3](/images/posts/flink/task-buffer-3.png)
+
+**分析：**
+从`JMX`监控看，主要是因为`Buffer`原因导致的线程`wait`，`cpu`抖动；
+共8台机器，每台机器上有13个`Slot`，根据`Job`是`30 + 90`的并行度来看，每台机器上同时存在多个`Task-Front`和`Task-End`；
+`Task-Front`需将处理好的数据存储到`ResultPartition`；
+`Task-End`需将接收到的数据存储到`InputGate`以备后续处理；
+`Task-End`将处理好的数据直接发送给`Kafka Topic`，所以不需要`ResultPartition`；
+一个`Task-Front`需将自己处理的数据`shuffle`到90个`Task-End`；
+
+通过`Flink Buffer`分配原理可知，需要`30*90`个`ResultPartition`，`90*30`个`InputGate`；
+若平均分则每个`ResultPartition/InputGate`可分配到的`Buffer`数量是：
+(10240 * 8) / (30*90 + 90 * 30) ≈ 15个(每个32k)；
+在`8w+/s, 5~10k/条`的数据量下的15个`Buffer`会在很短时间被填满，造成`Buffer`紧缺，`Task-Front`无法尽快将数据`shuffle`到下游，`Task-End`无法获取足够的数据来处理；
+
+**解决：**
+增大`taskmanager.network.numberOfBuffers`数量，最好保证每个`ResultPartition/InputGate`分配到90+（压测预估值，不保证效果最佳）的`Buffer`数量；
+
+**补充：**
+该问题看似简单，但起初在stackoverflow, Flink社区都有问过，但没得到十分准确的答案，最后还是回归源码并压测才解决掉的；
+在`OnYarn`下几乎不会遇到该为题，了解该问题有助于理解`Flink`内存管理&数据传递；
+`Flink 1.5`之后`Buffer`默认用堆外内存，并`deprecated`了`taskmanager.network.numberOfBuffers`，用`taskmanager.network.memory.max`与`taskmanager.network.memory.min`代替；
+关于`Buffer`分配&动态调整等逻辑可关注以下几个类：`TaskManagerRunner` / `Task` / `NetworkEnvironment` / `LocalBufferPool` / `InputGate` / `ResultPartition` / `MemorySegment`，在此不做源码解读，最后贴两个截图：
+![buffer-4](/images/posts/flink/task-buffer-4.png)
+![buffer-5](/images/posts/flink/task-buffer-5.png)
+
+### OnYarn下log的打印
+
+`Standalone`与`OnYarn`下的日志配置和输出路径有较大的区别，`Standalone`下直接在`maven`的`resources`目录下配置`log4j2.xml/log4j.properties`即可完成日志配置，但在`OnYarn`下 需要通过修改`${flink.dir}/conf/log4j.properties`的配置来定义日志输出，这些配置在`container.sh`启动`TaskManager/JobManager`时被加载以初始化`log4j`，配置如下：
+
+```properties
+# Log all infos in the given file
+log4j.appender.file=org.apache.log4j.DailyRollingFileAppender
+# ${log.file} input by luanch_container.sh
+log4j.appender.file.file=${log.file}
+log4j.appender.file.append=false
+log4j.appender.file.encoding=UTF-8
+log4j.appender.file.DatePattern='.'yyyy-MM-dd
+log4j.appender.file.layout=org.apache.log4j.PatternLayout
+log4j.appender.file.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p %-60c %x - %m%n
+```
+
+`${flink.dir}/conf`下不同log配置文件所适用的范围如下图：
+![log ui](/images/posts/flink/log-path-1.png)
+
+`${flink.dir}`中默认不包含`DailyRollingFileAppender`的依赖，所以在使用`DailyRollingFileAppender`时还需要添加依赖`apache-log4j-extras-1.2.17.jar`到`${flink.dir}/lib/`目录，`Flink Job`的日志会输出到`Yarn Container`的日志目录下（由`yarn-site.xml`中的`yarn.nodemanager.log-dirs`指定），`Container`的启动脚本（可在`YarnUI log`中找到）示例：
+
+```shell
+// log.file 即日志输出目录
+exec /bin/bash -c "$JAVA_HOME/bin/java -Xms1394m -Xmx1394m -XX:MaxDirectMemorySize=654m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -Dlog.file=/home/hadoop/apache/hadoop/latest/logs/userlogs/application_1547994202702_0027/container_e02_1547994202702_0027_01_000002/taskmanager.log -Dlogback.configurationFile=file:./logback.xml -Dlog4j.configuration=file:./log4j.properties org.apache.flink.yarn.YarnTaskExecutorRunner --configDir . 1> /home/hadoop/apache/hadoop/latest/logs/userlogs/application_1547994202702_0027/container_e02_1547994202702_0027_01_000002/taskmanager.out 2> /home/hadoop/apache/hadoop/latest/logs/userlogs/application_1547994202702_0027/container_e02_1547994202702_0027_01_000002/taskmanager.err"
+```
+
+**运行中的FlinkOnYarn Job日志查看：**
+直接通过`YarnUI`界面查看每个`Container`的日志输出，如下图：
+![log ui](/images/posts/flink/log-path-3.png)
+
+在`container`所在节点的对应目录下通过`tail, less`等shell命令查看日志文件，如下图：
+![log ui](/images/posts/flink/log-path-2.png)
+
+在`hadoop`配置`enable log aggregation`时，可以通过`yarn logs -applicationId ${application_id}`获取log；
+
+**已完成的FlinkOnYarn Job日志查看：**
+在配置`hadoop log aggregation`时，可以通过`yarn logs -applicationId ${application_id}`获取log；
+
+**注：** `Spark`中`HistoryServer`支持用户从`YarnUI`中查看已完成`Job`的日志等，但`Flink`中的`HistoryServer`在`OnYarn`下不可用，留下问题后续解决；
 
 ### Prometheus监控
 
@@ -249,7 +346,20 @@ java.lang.RuntimeException: Could not start PrometheusReporter HTTP server on an
         at org.apache.flink.runtime.taskexecutor.TaskManagerRunner$1.call(TaskManagerRunner.java:301)
         at org.apache.flink.runtime.taskexecutor.TaskManagerRunner$1.call(TaskManagerRunner.java:298)
 ```
-###
+
 ## 总结
 
+本文简单总结了Flink使用过程中遇到的几个重要的问题，最深的感受还是多读源码，源码读的够多一切问题都不是问题. ~ 。~
+
 ## 参考
+- [https://cwiki.apache.org/confluence/display/FLINK/Data+exchange+between+tasks](https://cwiki.apache.org/confluence/display/FLINK/Data+exchange+between+tasks)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/flinkDev/building.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/flinkDev/building.html)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/dev/stream/state/custom_serialization.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/dev/stream/state/custom_serialization.html)
+- [https://ci.apache.org/projects/flink/flink-docs-master/dev/types_serialization.html](https://ci.apache.org/projects/flink/flink-docs-master/dev/types_serialization.html)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/debugging_classloading.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/debugging_classloading.html)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/flinkDev/building.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/flinkDev/building.html)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/logging.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/logging.html)
+- https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/historyserver.html
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/debugging_classloading.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/debugging_classloading.html)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/metrics.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/metrics.html)
+- [https://ci.apache.org/projects/flink/flink-docs-release-1.7/dev/types_serialization.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/dev/types_serialization.html)
