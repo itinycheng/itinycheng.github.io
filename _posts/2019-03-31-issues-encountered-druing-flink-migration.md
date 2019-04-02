@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Flink Standalone迁移OnYarn过程中遇到的若干问题记录"
+title:  "Flink Standalone/OnYarn使用过程中遇到的若干问题记录"
 categories: flink
 tags:  flink yarn
 author: tiny
@@ -30,7 +30,7 @@ tar -czvf flink-1.7.1-hadoop31-scala_2.11.tar.gz flink-1.7.1/
 **报错：**
 使用`./bin/flink run -m yarn-cluster`的方式提交Job时出现如下报错：
 
-```nohightlight
+```java
 
 client端：
 ------------------------------------------------------------
@@ -85,7 +85,7 @@ OK，接下来说遇到的在`Avro`下的对象序列化异常，本次bug和上
 **报错：**
 开启`Avro`序列化（`enableForceAvro()`），`Task`间通过网络传递数据对象时，若对象内部有`field`为`null`，数据无法正常序列化抛出如下异常：
 
-```nohightlight
+```java
 
 java.lang.RuntimeException: in com.app.flink.model.Line in string null of string in field switchKey of com.app.flink.model.Line
 	at org.apache.flink.streaming.runtime.io.RecordWriterOutput.pushToRecordWriter(RecordWriterOutput.java:104)
@@ -130,7 +130,7 @@ Kryo:
 本问题在`Kafka0.8 + Flink 1.7`（`cannot guarantee End-to-End exactly once`）环境下造成了数据丢失的问题；
 
 **报错：**
-```nohightlight
+```java
 
 异常一：kafka异常（导致了Job重启）
 Caused by: java.lang.Exception: Could not complete snapshot 69 for operator wep
@@ -263,7 +263,6 @@ taskmanager.memory.size: 15g
 增大`taskmanager.network.numberOfBuffers`数量，最好保证每个`ResultPartition/InputGate`分配到90+（压测预估值，不保证效果最佳）的`Buffer`数量；
 
 **补充：**
-该问题看似简单，但起初在stackoverflow, Flink社区都有问过，但没得到十分准确的答案，最后还是回归源码并压测才解决掉的；
 在`OnYarn`下几乎不会遇到该为题，了解该问题有助于理解`Flink`内存管理&数据传递；
 `Flink 1.5`之后`Buffer`默认用堆外内存，并`deprecated`了`taskmanager.network.numberOfBuffers`，用`taskmanager.network.memory.max`与`taskmanager.network.memory.min`代替；
 关于`Buffer`分配&动态调整等逻辑可关注以下几个类：`TaskManagerRunner` / `Task` / `NetworkEnvironment` / `LocalBufferPool` / `InputGate` / `ResultPartition` / `MemorySegment`，在此不做源码解读，最后贴两个截图：
@@ -318,7 +317,7 @@ exec /bin/bash -c "$JAVA_HOME/bin/java -Xms1394m -Xmx1394m -XX:MaxDirectMemorySi
 `PrometheusPushGatewayReporter`是`Flink`主动将指标推送到`Gateway`，`Prometheus`从`Gateway`获取指标数据；
 
 `OnYarn`下`Flink`端开启`Prometheus`监控的配置：
-```java
+```yaml
 // Flink可以同时定义多个reportor，本示例定义了jmx和prometheus两种reportor
 // JMX用RMI，Prom用Http
 metrics.reporters: my_jmx_reporter,prom
@@ -335,7 +334,7 @@ metrics.reporter.prom.port: 9250-9275
 否则会有监控服务启动失败的报错，如下：
 
 **报错：**
-```nohightlight
+```java
 2019-03-12 20:44:39,623 INFO  org.apache.flink.runtime.metrics.MetricRegistryImpl           - Configuring prom with {port=9250, class=org.apache.flink.metrics.prometheus.PrometheusReporter}.
 2019-03-12 20:44:39,627 ERROR org.apache.flink.runtime.metrics.MetricRegistryImpl           - Could not instantiate metrics reporter prom. Metrics might not be exposed/reported.
 java.lang.RuntimeException: Could not start PrometheusReporter HTTP server on any configured port. Ports: 9250
@@ -349,7 +348,7 @@ java.lang.RuntimeException: Could not start PrometheusReporter HTTP server on an
 
 ## 总结
 
-本文简单总结了Flink使用过程中遇到的几个重要的问题，最深的感受还是多读源码，源码读的够多一切问题都不是问题. ~ 。~
+本文简单总结了Flink使用过程中遇到的几个重要的问题，`taskmanager.network.numberOfBuffers配置`的问题有在stackoverflow, FlinkCommunity问过，但没得到较为准确的答案，最终通过gg文档&源码才逐渐理解，源码&Google的重要性不言而喻！
 
 ## 参考
 - [https://cwiki.apache.org/confluence/display/FLINK/Data+exchange+between+tasks](https://cwiki.apache.org/confluence/display/FLINK/Data+exchange+between+tasks)
