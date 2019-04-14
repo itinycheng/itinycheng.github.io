@@ -209,7 +209,7 @@ public static void destroy() {
 
 可参考Flink Docs：https://ci.apache.org/projects/flink/flink-docs-release-1.7/monitoring/debugging_classloading.html
 
-**注：** `coding`时候尽量用`RichFunction` 的`open()/close()`方法初始化对象，尽可能用（单例）对象持有各种资源，而不要用`static`，其生命周期不可控；
+**注：** `coding`时候尽量用`RichFunction` 的`open()/close()`方法初始化对象，尽可能用（单例）对象持有各种资源，减少使用`static`（生命周期不可控），及时对`static`修饰对象手动置空；
 
 ### taskmanager.network.numberOfBuffers配置
 
