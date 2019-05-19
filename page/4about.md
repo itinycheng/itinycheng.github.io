@@ -21,11 +21,12 @@ type: page
 
 ## 关于本站
 
+[![996.icu](https://img.shields.io/badge/link-996.icu-red.svg)](https://996.icu)
 
 ## 友情链接
 
 [Apache Flink](https://flink.apache.org/) \| [Scala-lang](https://www.scala-lang.org/) \|
-[JDK11 Doc](https://docs.oracle.com/en/java/javase/11/docs/api/index.html)
+[JDK11 Doc](https://docs.oracle.com/en/java/javase/11/docs/api/index.html) \|
 
 ## Comments
 
