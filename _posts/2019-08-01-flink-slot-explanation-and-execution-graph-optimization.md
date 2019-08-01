@@ -15,7 +15,7 @@ author: tiny
 近期公司内部的Flink Job从Standalone迁移OnYarn时发现Job性能较之前有所降低，迁移前有8.3W+/S的数据消费速度，迁移到Yarn后分配同样的资源但消费速度降为7.8W+/S，且较之前的消费速度有轻微的抖动；经过简单的原因分析和测试验证得以最终解决，方案概述：在保持分配给Job的资源不变的情况下将总Container数量减半，每个Container持有的资源从`1C2G 1Slot`变更为`2C4G 2Slot`。本文写作的起因是经历该问题后发现深入理解Slot和Flink Runtime Graph是十分必要的；本文主要分为两个部分，第一部分详细的分析Flink Slot与Job运行关系，第二部详细的说下遇到的问题和解决方案。
 
 
-## Explain Of Slot
+## Flink Slot
 
 Flink集群是由JobManager(JM), TaskManager(TM)两大组件组成的，每个JM/TM都是运行在一个独立的JVM进程中，JM相当于Master 是集群的管理节点，TM相当于Worker 是集群的工作节点，每个TM最少持有1个Slot，Slot是Flink执行Job时的最小资源分配单位，在Slot中运行着具体的Task任务。对TM而言：它占用着一定数量的CPU和Memory资源，具体可通过`taskmanager.numberOfTaskSlots`, `taskmanager.heap.size`来配置，实际上`taskmanager.numberOfTaskSlots`只是指定TM的Slot数量并不能隔离指定数量的CPU给TM使用，在不考虑Slot Sharing(下文详述)的情况下一个Slot内运行着一个SubTask(Task实现Runable，SubTask是一个执行Task的具体实例)，所以官方建议`taskmanager.numberOfTaskSlots`配置的Slot数量和CPU相等或成比例；当然，我们可以借助Yarn等调度系统，用Flink On Yarn的模式来为Yarn Container分配指定数量的CPU资源以达到较严格的CPU隔离（Yarn采用Cgroup做基于时间片的资源调度，每个Container内运行着一个JM/TM实例）；`taskmanager.heap.size`用来配置TM的Memory，如果一个TM有N个Slot，则每个Slot分配到的Memory大小为整个TM Memory的1/N，同一个TM内的Slots只有Memory隔离，CPU是共享的；对Job而言：一个Job所需的Slot数量大于等于Operator配置的最大Parallelism数，在保持所有Operator的`slotSharingGroup`一致的前提下Job所需的Slot数量与Job中Operator配置的最大Parallelism相等。
 
@@ -34,7 +34,7 @@ Flink集群是由JobManager(JM), TaskManager(TM)两大组件组成的，每个JM
 ## Operator Chain
 Operator Chain是指将Job中的Operators按照一定策略（例如：single output operator可以chain在一起）链接起来并放置在一个Task线程中执行；Operator Chain默认开启，可通过`StreamExecutionEnvironment.disableOperatorChaining()`关闭，Flink Operator类似Storm中的Bolt，在Strom中上游Bolt到下游会经过网络上的数据传递，而Flink的Operator Chain将多个Operator链接到一起执行，减少了数据传递/线程切换等环节，降低系统开销的同时增加了资源利用率和Job性能；实际开发过程中需要开发者了解这些原理并能合理分配Memory和CPU给到每个Task线程。
 
-*注：* 【一个需要注意的地方】Chained的Operators之间的数据传递默认需要经过数据的拷贝（例如：kryo.copy(...)），将上游Operator的输出序列化出一个新对象并传递给下游Operator，可以通过`ExecutionConfig.enableObjectReuse()`开启对象重用，这样就关闭了这层copy操作，可以减少对象序列化开销和GC压力等，具体源码可阅读`org.apache.flink.streaming.runtime.tasks.OperatorChain`与`org.apache.flink.streaming.runtime.tasks.OperatorChain.CopyingChainingOutput`。
+*注：* 【一个需要注意的地方】Chained的Operators之间的数据传递默认需要经过数据的拷贝（例如：kryo.copy(...)），将上游Operator的输出序列化出一个新对象并传递给下游Operator，可以通过`ExecutionConfig.enableObjectReuse()`开启对象重用，这样就关闭了这层copy操作，可以减少对象序列化开销和GC压力等，具体源码可阅读`org.apache.flink.streaming.runtime.tasks.OperatorChain`与`org.apache.flink.streaming.runtime.tasks.OperatorChain.CopyingChainingOutput`；官方建议开发人员在完全了解reuse内部机制后才使用该功能，冒然使用可能会给程序带来bug。
 
 Operator Chain效果可参考如下官方文档截图：
 
