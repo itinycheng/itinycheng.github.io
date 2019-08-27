@@ -2,7 +2,7 @@
 layout: post
 title:  "Flink Slot详解与Job Execution Graph优化"
 categories: flink
-tags:  flink yarn slot
+tags:  flink yarn slot InfoQ
 author: tiny
 ---
 
