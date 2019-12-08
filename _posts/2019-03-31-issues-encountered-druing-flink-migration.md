@@ -77,7 +77,7 @@ Caused by: java.lang.RuntimeException: Couldn`t deploy Yarn cluster
 ### Flink-Avro序列化与AllowNull
 `Flink`类型系统和序列化方式可关注官方doc：
 [https://ci.apache.org/projects/flink/flink-docs-master/dev/types_serialization.html](https://ci.apache.org/projects/flink/flink-docs-master/dev/types_serialization.html)
-`Flink`默认支持`PoJoSerializer`，`PojoSerializer`，`KryoSerializer`三种序列化，官方推荐使用Flink自己实现的`PojoSerializer`序列化（在遇到无法用PoJoSerializer转化的时默认用`KryoSerializer`替代，具体可关注`GenericTypeInfo`），`Kryo`性能较`Avro`好些，但无供跨语言的解决方案且序列化结果的自解释性较`Avro`差；经过功能性能等多方面的调研，计划`Task`间数据传递用`Kryo`，提高数据序列化性能，状态的`checkpoint`，`savepoint`用`Avro`，让状态有更好的兼容&可迁移性；此功能从`Flink 1.7+`开始支持具体关注doc:
+`Flink`默认支持`PoJoSerializer`，`AvroSerializer`，`KryoSerializer`三种序列化，官方推荐使用Flink自己实现的`PojoSerializer`序列化（在遇到无法用PoJoSerializer转化的时默认用`KryoSerializer`替代，具体可关注`GenericTypeInfo`），`Kryo`性能较`Avro`好些，但无供跨语言的解决方案且序列化结果的自解释性较`Avro`差；经过功能性能等多方面的调研，计划`Task`间数据传递用`Kryo`，提高数据序列化性能，状态的`checkpoint`，`savepoint`用`Avro`，让状态有更好的兼容&可迁移性；此功能从`Flink 1.7+`开始支持具体关注doc:
 [https://ci.apache.org/projects/flink/flink-docs-release-1.7/dev/stream/state/custom_serialization.html](https://ci.apache.org/projects/flink/flink-docs-release-1.7/dev/stream/state/custom_serialization.html)
 
 OK，接下来说遇到的在`Avro`下的对象序列化异常，本次bug和上边的内容无关~,~. 这个报错只是因为`Flink-Avro`不支持`null`的序列化；
@@ -124,6 +124,7 @@ Kryo:
 **解决：**
 1. 给需要序列化的`field`值赋默认值；
 2. 改用`Kryo`（`enableForceKryo()`）序列化；
+3. 去除`enableForceXXX()`尝试下默认的`PoJoSerializer`；
 
 ### ClassLoader导致Failover Failed
 
