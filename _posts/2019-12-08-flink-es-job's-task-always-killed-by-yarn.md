@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "一个最简单的Flink Job，一次最复杂的问题排查"
+title:  "一个简单的Flink Job，一次复杂的问题排查"
 categories: flink
 tags:  flink elasticsearch yarn
 author: tiny
@@ -37,7 +37,7 @@ author: tiny
 
 **异常描述：**
 
-Job正常启动后TaskManager所在的Container每3～5min会被Yarn Kill掉，然后ApplicationMaster会重新向Yarn申请一个新的Container以启动之前被Kill掉的，整个Job会陷入`Kill Container`/`Apply For New Container`/`Start New Task`的循环，在Flink和Yarn的日志里都会发现如下错误信息：
+Job正常启动后TaskManager所在的Container每3～5min会被Yarn Kill掉，然后ApplicationMaster会重新向Yarn申请一个新的Container以启动之前被Kill掉的，整个Job会陷入`Kill Container`/`Apply For New Container`/`Run Task/ Kill Container...`的循环，在Flink和Yarn的日志里都会发现如下错误信息：
 
 ```java
 2019-11-25 20:12:41,138 INFO  org.apache.flink.yarn.YarnResourceManager - Closing TaskExecutor connection container_e03_1559725928417_0577_01_001065 because: [2019-11-25 20:12:36.159]Container [pid=97191,containerID=container_e03_1559725928417_0577_01_001065] is running 168853504B beyond the 'PHYSICAL' memory limit. Current usage: 6.2 GB of 6 GB physical memory used; 9.8 GB of 60 GB virtual memory used. Killing container.
@@ -53,7 +53,7 @@ Dump of the process-tree for container_e03_1559725928417_0577_01_001065 :
 
 ## 问题分析
 
-**看到上述异常信息，我的第一直觉是heap或off-heap的Memory占用过大，先分析Contianer的内存占用情况。**
+**看到上述异常信息，第一直觉是heap或off-heap的Memory占用过大，应该先分析下Container的内存占用情况。**
 
 *信息：*
 - Container进程启动使用的Memory配置：`-Xms4425m -Xmx4425m -XX:MaxDirectMemorySize=1719m`；
@@ -70,27 +70,30 @@ Dump of the process-tree for container_e03_1559725928417_0577_01_001065 :
 - 被Kill的Container最后一次GC Log：`[Eden: 642.0M(642.0M)->0.0B(676.0M) Survivors: 32.0M->26.0M Heap: 3893.9M(4426.0M)->3245.6M(4426.0M)]`
 
 *分析：*
-通过`Flink Log`和`Web Dashborad`查看到上述四项有关Container启动/运行时的信息，发现heap和off-heap都在合理的范围（有足够的空闲Memory），但heap占用一直在`3.8G`高位，虽然感觉上不是heap的问题，但仍有侥幸心理：先降低heap占用试下。这时做了一次Flink配置修改：`taskmanager.memory.preallocate: false`，这个配置主要是针对TaskManager Managed Memory的，与`taskmanager.memory.off-heap`, `taskmanager.memory.fraction`配合使用，详细说明见：[Flink Configuration Doc](https://ci.apache.org/projects/flink/flink-docs-release-1.9/ops/config.html#taskmanager)。
+通过`Flink Log`和`Web Dashborad`查看到上述四项有关Container启动/运行时的信息，发现heap和off-heap都在合理的范围（有足够的空闲Memory），但heap占用的Memory一直在`3.8G`左右，感觉上这个值属正常，但仍有侥幸心理：先降低heap占用试下。这时做了一次Flink配置修改：`taskmanager.memory.preallocate: false`，这个配置主要是针对TaskManager Managed Memory的，与之相关的还有`taskmanager.memory.off-heap`, `taskmanager.memory.fraction`等，详细说明见：[Flink Configuration Doc](https://ci.apache.org/projects/flink/flink-docs-release-1.9/ops/config.html#taskmanager)。
 
-修改配置后重启压测Job，正常运行了几分钟后问题又再次出现，Container被Kill前最后一次GC Log：`[Eden: 192.0M(192.0M)->0.0B(194.0M) Survivors: 28.0M->26.0M Heap: 2629.3M(4426.0M)->250.2M(4426.0M)]`，从`Web Dashboard`中观察到的最大最大`heap used`为`3.7G`，`off-heap used`为`1.3G`。
+修改配置后重启Job，正常运行了几分钟后问题又再次出现，Container被Kill前最后一次GC Log：`[Eden: 192.0M(192.0M)->0.0B(194.0M) Survivors: 28.0M->26.0M Heap: 2629.3M(4426.0M)->250.2M(4426.0M)]`，从`Web Dashboard`中观察到的最大`heap used`是`3.7G`，`off-heap used`是`1.3G`。
 
 *思考：*
-`heap/off-heap size`的瞬时变化都在`-Xmx4425m -XX:MaxDirectMemorySize=1719m`范围内（而已有足够的空闲），同时`Xmx + MaxDirectMemorySize = 6G`，所以任何时间的Memory使用：`heap + off-heap < 6G`，另一方面：若`heap + off-heap > 6G`，则应该抛出OOM的异常，所以判定当前问题与Heap/Off-heap没有直接关系。接下来有两个疑问：1. Container Memory的计算逻辑是什么，使得计算结果出现大于6G的情况？2. 一个JVM进程包括：Heap, Off-heap,  Non-heap, Stack等区域，前三个在`Web Dashboard`可以看到并且内存总和不大于6G，而Stack内存占用并不能直接观察到，当前问题是否由Stack占用的Memory过大而引起？
+`heap/off-heap memory`在任意时间的实际使用都在`-Xmx4425m -XX:MaxDirectMemorySize=1719m`范围内（而且有足够的空闲空间）变化，同时`Xmx + MaxDirectMemorySize = 6G`，所以任何时间的Memory使用：`heap + off-heap < 6G`；另一方面：若`heap + off-heap > 6G`，则应该抛出OOM的异常，所以判定当前问题与Heap/Off-heap没有直接关系。接下来有两个疑问：1. Container Memory的计算逻辑是什么，使得计算结果出现大于6G的情况？2. 一个JVM进程包括：Heap, Off-heap,  Non-heap, Stack等区域，前三个在`Web Dashboard`可以看到并且内存总和不大于6G，而Stack内存占用并不能直接观察到，当前问题是否由Stack占用的Memory过大而引起？
 
-**现在虽然我们确定了问题与heap/off-heap没有直接的因果关系，但是下一步的分析方向可以明确了。**
+**现在我们不但可以确定当前问题与heap/off-heap没有直接的因果关系，而且下一步的分析方向可以明确了。**
 
-*Container Memory的计算逻辑：*
-- NodeManager有一个Monitor线程，它主要负责监控Container使用的`Physical Memory`和`Virtual Memory`是否超出限制，默认检查周期：3s，代码逻辑可查看：MonitoringThread。
-- Container Memory的内存量计算有`ProcfsBasedProcessTree`和`CombinedResourceCalculator`两种实现，默认情况下使用`ProcfsBasedProcessTree`。
+**1. Container Memory的计算逻辑：**
+
+- Hadoop NodeManager有一个Monitor线程，它负责监控Container使用的`Physical Memory`和`Virtual Memory`是否超出限制，默认检查周期：3s，代码逻辑可查看：MonitoringThread。
+- `Container Memory`的内存量计算有`ProcfsBasedProcessTree`和`CombinedResourceCalculator`两种实现，默认情况下使用`ProcfsBasedProcessTree`。
 - `ProcfsBasedProcessTree`通过`Page数量 * Page大小`来计算`Physical Memory`的使用量，其中Page数量从文件`/proc/<pid>/stat`解析获得，单Page大小通知执行shell命令`getconfg PAGESIZE`获取，代码截图如下：
 ![execution graph 1](/images/posts/flink/yarn-container-2.png)
 
 
-*Stack Memory的分配区域：*
-由于JVM功底并不深，初听`Stack Memory`具体在哪个区域分配，还真不能准确回答~.~。[JVM规范定义](https://docs.oracle.com/javase/specs/jvms/se12/html/jvms-2.html#jvms-2.5.2)：`Each Java Virtual Machine thread has a private Java Virtual Machine stack, created at the same time as the thread. A Java Virtual Machine stack stores frames (§2.6). A Java Virtual Machine stack is analogous to the stack of a conventional language such as C: it holds local variables and partial results, and plays a part in method invocation and return. Because the Java Virtual Machine stack is never manipulated directly except to push and pop frames, frames may be heap allocated. The memory for a Java Virtual Machine stack does not need to be contiguous.`。在这段定义并没对Stack Memory的分配做明确定义，只有两句线索：`frames may be heap allocated`和`stack does not need to be contiguous`，这说明各JVM产品可对`Stack Memory`的分配做各自的灵活实现。对自己来说C暂时是座翻不过的山，也不必要那么兴师动众～～～，直接上测试Code看吧：
+**2. Stack Memory的分配区域：**
+
+由于JVM功底并不深，初听`Stack Memory`具体在哪个区域分配，还真不能准确回答～～。[JVM规范定义](https://docs.oracle.com/javase/specs/jvms/se12/html/jvms-2.html#jvms-2.5.2)：`Each Java Virtual Machine thread has a private Java Virtual Machine stack, created at the same time as the thread. A Java Virtual Machine stack stores frames (§2.6). A Java Virtual Machine stack is analogous to the stack of a conventional language such as C: it holds local variables and partial results, and plays a part in method invocation and return. Because the Java Virtual Machine stack is never manipulated directly except to push and pop frames, frames may be heap allocated. The memory for a Java Virtual Machine stack does not need to be contiguous.`。这段定义并没对Stack Memory的分配做明确定义，只有两句线索：`frames may be heap allocated`和`stack does not need to be contiguous`，各JVM产品可对`Stack Memory`的分配做各自的灵活实现。对自己来说C++暂时是座难翻越的山，也不必要那么兴师动众～～～，直接上测试Code看吧：
+
 ```java
 /**
- *
+ * jvm env: Oracle JDK-8
  * jvm conf:
  * -Xmx200m -Xms200m -Xss5m -XX:MaxDirectMemorySize=10m -XX:NativeMemoryTracking=detail
  */
@@ -175,68 +178,48 @@ Total: reserved=4028MB, committed=2766MB
                             (mmap: reserved=17MB, committed=17MB)
 ```
 
-测试Code对应的JMX监控：
+**结论：** 从`Native Memory Tracking`可以看到`Thread Stack Memory`占用了`2573MB`，而`heap/off-heap`的Memory占用非常低；所以，`Stack Memory`的分配是在`heap/off-heap`之外的区域（虽然暂时不完全了解Stack Memory的分配细节）。**此时，我们可以合理怀疑当前问题是由`Stack Memory`占用过多引起的。**
 
+补充一张测试DEMO的Memory监控（非必须），可以简单的关注下Heap/GC情况：
+![execution graph 1](/images/posts/flink/stack-memory-1.png)
 
+**Container的实际线程情况：**
+从VisualVM的线程监控中可以看到一个Container进程内有`1734个Live Thread`和`1622个Daemon Thread`，对于一个只有`2C6G`的进程来讲，线程数太多，不仅会影响到Memory使用，也会给GC/线程上下文切换带来更大的压力；在所有活跃线程里有`1200+`个是`es transport client`，占总活跃线程的`70%+`，如下图：
+![container jmx es](/images/posts/flink/container-threads-1.png)
 
-java.nio:type=BufferPool,
-          -Xmx4G -XX:MaxDirectMemorySize=1719m  KafkaConsumer + es5 + localCache， container预留，
-
-
-**其次：** 梳理下Container统计内存占用方法，看是否能得到一些有用的信息；
-         pageSize * sizeNum
-**然后：** 回头重新梳理下JVM的内存结构和Container的内存分配情况；
-          heap/off-heap， stack，4G+2G：若出现任何一个区域的超出则肯定会有OOM的异常，而非kill
-**最后：** 通过JMX观察Container进程是否存在异常指标；
-          GCRoot过多导致GC压力大，线程过多会导致线程频繁切换；
-**最后：** 写测试Demo来验证Stack Memory是在哪个区域分配的；
-
-
-**最后：** 结合JMX观察到的情况和上一步测试Demo得出的结论找出答案；
+**到此，可得出解题方案，即：** 减少Container内的`ES Sink`实例个数以达到降低`es transport client`线程数量的目的。将`ES Sink`的并行度由21调整为2（写数据到ES速度大概为1200+条/s，2个并行度可以满足需求），重启Job后运行正常，当前问题得到完美解决，调整后的执行计划如下图：
 ![execution graph 2](/images/posts/flink/execution-graph-2.png)
 
-## 问题遗留
+## 问题遗留&思考
 
-快速失败的问题，在Yarn没有对应的配置，在Flink端也没有；
-Flink对应的Connector没有单例的实现，同时又有Slot Sharing的存在，所以容易使得一个Slot中存在多个Sinker对象（多个Task），这些是与Spark有差异的地方，可能刚开始使用Flink时容易被忽略掉，大家需要特别小心；
+- *快速失败：* 当前Yarn或Flink中没有可用的配置来指定`Kill Container`或`allocate Container`的最大次数，以达到在超过某个限制时候，让Job快速失败的目的；Flink中有`yarn.maximum-failed-containers`配置，当并不适用当前场景；还是需要自己写脚本来完成类似的功能；贴一个反复申请Container的截图：
+![yarn container 1](/images/posts/flink/yarn-container-1.png)
+
+- *胡思乱想：* Flink的Task之间不能共享Operator，Operator也不会有单例的实现，唯一存在的是并行度和Task分配运行策略；若当前问题中一个Container进程内多个Task之间可用共享一个单例的`ES Sink`多好～dog～，这样就可以少一层物理机间的数据传递。
+
+- *注意小心：* Slot Sharing是个很好的特性，可以很大程度提高资源利用率，但也需小心，不要让单个Slot内的Task数量过多。
 
 ## 总结
 
-在起初对Job的思考中是想尽量减少资源占用，最极端的办法就是将数据读取/处理/写出的整个流程放在同一个JVM中，这样Operator间的数据传递就可以在JVM内部完成而非需要在网络间传递数据；由此，进一步想到`Chain All Operators Together`，这样就必须把所有`source/filter/sink`的并行度设置为相同的值；然而，这就造成每个Container中的Operator数量增加，特别是`Es Sink`是个较为重的Operator（内部维护的线程/缓存/状态较多）；`Es Sink`实例对象的增加导致了线程数的成倍增加，所有线程持有的Stack Memory总和也成倍增加，用于运行Job Task的Memory数量进一步减少，另外一个Container所持有的2C的CPU资源其实也很难支撑这么多的线程数正常运行。
+起初对Job的设计思考中是想尽量减少资源占用，最极端的办法就是将数据读取/处理/写出的整个流程放在同一个JVM进程中，这样Operator间的数据传递就可以在进程内部完成而减少网络间的数据传递；由此想到`Chain All Operators Together`，这样就必须把`source/filter/sink`的并行度设置为相同的值；然而，这就让每个Task都持有一个Sink实例，同时因为`Slot Sharing`特性的存在，每个Container内部会运行多个Task，这就导致单个Container中存在多个Sink实例，特别是`Es Sink`这种较为重的Operator（内部维护的线程/缓存/状态较多）；`Es Sink`实例对象的增加导致了线程数的成倍增加，所有线程持有的`Stack Memory`总和也成倍增加，用于运行`Job Task`的Memory数量进一步减少，另一方面：每个Container所持有的2个CPU资源也很难支撑太多数量的线程高效运行。
 
-所以，在了解到上述内容后，首先需要做的事情是减少Container中的线程数（降低Stack Memory占用，减少线程切换），减少线程办法就是减少`ES Sink Operator`的数量（source/filter线程少可忽略不计），从得出了当前的解决方案；
+所以，在了解到上述内容后，首先需要做的事情是减少Container内的线程数（降低`Stack Memory`占用，减少频繁的线程上下文切换），减少线程办法就是减少`ES Sink`的数量（`source/filter`线程少可忽略不计），从得出了当前的解决方案；
 
-最后，将`Es Sink Operator`并行度调整为2后重启Job，问题得到彻底解决，至今Job已平稳运行了10多天；
+最后，将`Es Sink`并行度调整为2后问题得到彻底解决，至今Job已平稳运行了半个多月；
+
+*注：JVM很重要，清晰定位问题很重要；在最初的问题排查过程中，自己总试图从`heap/off-heap`寻找答案，甚至还将`heap/off-heap`占用的Memory进行拆分加和以计算是否存在使用过量的情况，耗费了不少精力。*
+
 
 ## Reference
-https://dzone.com/articles/troubleshoot-outofmemoryerror-unable-to-create-new
-http://blog.jamesdbloom.com/JVMInternals.html#stack
 
-
-cGroup: /proc/<pid>/stat
-proc: https://www.cnblogs.com/yurunmiao/p/5070287.html
-yarn.nodemanager.container-monitor.process-tree.class
-
-container_e03_1559725928417_0572_01_000002
-less hadoop-hadoop-nodemanager-bj-xg-app-flink-007.tendcloud.com.log
-
-
-首先判断堆内外oom
-堆外占用也增长很快
-定义Xmx等后不是应该报oom，为什么会被kill
-Xss 默认 1M，1000+个线程
-java stack详解，与堆的关系，与-Xmx的关系
-container内存组成：taskmanager.heap.size=4g(heap, noff-heap, non-heap, stack)
-列举一个task线程，将task线程中所有对象split到各个区域heap，off-heap，stack等等；
-关于stack的详细描述，FIFO，堆外，有各自独立的计数器 。。。
-将container的内存6g分割开 堆4G，堆外4G，Flink container组成，managed、.....
-jcmd 36337 VM.native_memory summary scale=MB
--ea -Xmx100m -Xms100m -Xss5m -XX:MaxDirectMemorySize=10m -XX:NativeMemoryTracking=detail
-
-jobmnager无限次向yarn申请新的container问题解决，如何快速失败；
-
-=====expand thinking=====
-任务失败有多种，yarn kill container， job internal logic occur exception
-==========
-flink preallocate memory
-flink与spark比多出了slot share 这种概念，同时也因为是pipline很容易在内存，cpu，等方面出问题
+- https://ci.apache.org/projects/flink/flink-docs-master/ops/config.html
+- https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-2.html#jvms-2.5.2
+- http://blog.jamesdbloom.com/JVMInternals.html#stack
+- https://stackoverflow.com/questions/41120129/java-stack-and-heap-memory-management
+- https://dzone.com/articles/troubleshoot-outofmemoryerror-unable-to-create-new
+- https://stackoverflow.com/questions/36946455/stack-heap-in-jvm
+- https://www.baeldung.com/java-stack-heap
+- https://www.maolintu.com/2018/02/03/jvm-stack-vs-heap-vs-method-area/
+- https://gribblelab.org/CBootCamp/7_Memory_Stack_vs_Heap.html
+- https://docs.oracle.com/en/java/javase/13/vm/native-memory-tracking.html
+- http://coding-geek.com/jvm-memory-model/
