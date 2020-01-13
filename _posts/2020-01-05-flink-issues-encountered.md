@@ -56,7 +56,7 @@ Caused by: java.io.IOException: Could not flush and close the file system output
 每隔`10～30min`就会出现一次`state checkpoint failed.`，进而导致Job重启（checkpoint默认策略，可配置），`Job Log`中发现上述错误信息；
 
 **异常排查：**
-- 起初怀疑是机房间的网络不稳定（Kafka和Flink在同一个城市内的不同机房～～），虽然有200G的专线；找运维同事协助测试的网络延迟属正常，延迟都在2～3ms之间（`icmp_seq=105 ttl=58 time=2.25 ms  11:09:05`），没有网络波动出现；
+- 起初怀疑是机房间的网络不稳定（Kafka和Flink在同一个城市内的不同机房～～），虽然有20G的专线；找运维同事协助测试的网络延迟属正常，延迟都在2～3ms之间（`icmp_seq=105 ttl=58 time=2.25 ms  11:09:05`），没有网络波动出现；
 - 然后怀疑是Hdfs问题，因checkpoint主要做了两个事情：跨机房获取`consumed offset`和`write state to HDFS`；
 - 重新check错误日志，找到异常在Flink框架内中最早发生位置，即：`FsCheckpointStreamFactory$FsCheckpointStateOutputStream.closeAndGetHandle(...)`，阅读源码，了解具体操作；
 - `FsCheckpointStateOutputStream.closeAndGetHandle(...)`操作很简单，就是将state从byte[]写入到`HDFS File`，中间没有多余的操作；

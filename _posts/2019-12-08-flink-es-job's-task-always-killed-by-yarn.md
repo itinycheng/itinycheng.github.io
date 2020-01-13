@@ -192,10 +192,12 @@ Total: reserved=4028MB, committed=2766MB
 
 ## 问题遗留&思考
 
+- *内存组成：* 除去上述提到的内存使用外还有socket send/receive buffer也占用了一部分空间。
+
 - *快速失败：* 当前Yarn或Flink中没有可用的配置来指定`Kill Container`或`allocate Container`的最大次数，以达到在超过某个限制时候，让Job快速失败的目的；Flink中有`yarn.maximum-failed-containers`配置，当并不适用当前场景；还是需要自己写脚本来完成类似的功能；贴一个反复申请Container的截图：
 ![yarn container 1](/images/posts/flink/yarn-container-1.png)
 
-- *胡思乱想：* Flink的Task之间不能共享Operator，Operator也不会有单例的实现，唯一存在的是并行度和Task分配运行策略；若当前问题中一个Container进程内多个Task之间可用共享一个单例的`ES Sink`多好～dog～，这样就可以少一层物理机间的数据传递。
+- *胡思乱想：* Flink的Task之间不能共享Operator，Operator也不会有单例的实现，唯一存在的是并行度和Task分配运行策略；若当前问题中一个Container进程内多个Task之间可用共享一个单例的`ES Sink`多好～～～，这样就可以少一层物理机间的数据传递。
 
 - *注意小心：* Slot Sharing是个很好的特性，可以很大程度提高资源利用率，但也需小心，不要让单个Slot内的Task数量过多。
 
