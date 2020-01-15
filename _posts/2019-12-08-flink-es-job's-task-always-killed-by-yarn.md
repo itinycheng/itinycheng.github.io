@@ -62,8 +62,8 @@ Dump of the process-tree for container_e03_1559725928417_0577_01_001065 :
   # defined configuration
   taskmanager.heap.size: 2048m   # 默认为2G，当前Job中被覆盖为6G，指定Container Memory(heap+off-heap)；
   taskmanager.memory.preallocate: true  # Whether pre-allocated memory of taskManager managed
-  containerized.heap-cutoff-min: 500    # 安全边界，从Container移除的最小 Heap Memory Size
-  containerized.heap-cutoff-ratio: 0.2  # 移除的Heap Memory的比例，用于计算Container进程heap/off-heap的大小
+  containerized.heap-cutoff-min: 900    # 安全边界，从Container移除的最小 Heap Memory Size
+  containerized.heap-cutoff-ratio: 0.2  # 移除的Heap Memory的比例，用于计算Container进程的heap和max off-heap的大小，max off-heap越大留给Flink之外服务的Memory越多，这些空间一般被用作Container，Socket通信或是一些堆外Cache等；
   ```
 - `Flink Web Dashboard`中heap/off-heap的监控如下图：
 ![execution graph 1](/images/posts/flink/memory-metric-1.png)
@@ -75,9 +75,9 @@ Dump of the process-tree for container_e03_1559725928417_0577_01_001065 :
 修改配置后重启Job，正常运行了几分钟后问题又再次出现，Container被Kill前最后一次GC Log：`[Eden: 192.0M(192.0M)->0.0B(194.0M) Survivors: 28.0M->26.0M Heap: 2629.3M(4426.0M)->250.2M(4426.0M)]`，从`Web Dashboard`中观察到的最大`heap used`是`3.7G`，`off-heap used`是`1.3G`。
 
 *思考：*
-`heap/off-heap memory`在任意时间的实际使用都在`-Xmx4425m -XX:MaxDirectMemorySize=1719m`范围内（而且有足够的空闲空间）变化，同时`Xmx + MaxDirectMemorySize = 6G`，所以任何时间的Memory使用：`heap + off-heap < 6G`；另一方面：若`heap + off-heap > 6G`，则应该抛出OOM的异常，所以判定当前问题与Heap/Off-heap没有直接关系。接下来有两个疑问：1. Container Memory的计算逻辑是什么，使得计算结果出现大于6G的情况？2. 一个JVM进程包括：Heap, Off-heap,  Non-heap, Stack等区域，前三个在`Web Dashboard`可以看到并且内存总和不大于6G，而Stack内存占用并不能直接观察到，当前问题是否由Stack占用的Memory过大而引起？
+`heap/off-heap memory`在任意时间的实际使用量都在`-Xmx4425m -XX:MaxDirectMemorySize=1719m`范围内（而且有足够的空闲空间）变化，同时`Xmx + MaxDirectMemorySize = 6G`，所以任何时间的Memory使用：`heap + off-heap < 6G`；另一方面：若`heap + off-heap > 6G`，则应该抛出OOM的异常，所以判定当前问题与Heap/Off-heap的实际占用没有直接关系。接下来有两个疑问：1. Container Memory的计算逻辑是什么，使得计算结果出现大于6G的情况？2. 一个JVM进程包括：Heap, Off-heap,  Non-heap, Stack等区域，前三个在`Web Dashboard`可以看到并且内存总和不大于6G，而Stack内存占用并不能直接观察到，当前问题是否由Stack占用的Memory过大而引起？
 
-**现在我们不但可以确定当前问题与heap/off-heap没有直接的因果关系，而且下一步的分析方向可以明确了。**
+**现在我们不但可以确定当前问题与Heap/Off-heap没有直接的因果关系，而且下一步的分析方向可以明确了。**
 
 **1. Container Memory的计算逻辑：**
 
@@ -201,6 +201,8 @@ Total: reserved=4028MB, committed=2766MB
 
 - *注意小心：* Slot Sharing是个很好的特性，可以很大程度提高资源利用率，但也需小心，不要让单个Slot内的Task数量过多。
 
+- *另一种选择：* 其实，我们可以通过增大`containerized.heap-cutoff-ratio`到`0.4`或是更高来解决当前问题（预留足够多的Memory给到`Stack/Container/Socket`使用），但这样势必会减少Heap的大小，考虑到Task内不断增多的`Local Cache`，所以并未做此调整；另一方面，通过JMX观测到GC的CPU占用超过20%且抖动厉害，只增大`MaxDirectMemorySize`是解决不了这个GC问题的，而通过减少线程数可以很好减少GCRoot，降低线程切换频率以降低GC压力；
+
 ## 总结
 
 起初对Job的设计思考中是想尽量减少资源占用，最极端的办法就是将数据读取/处理/写出的整个流程放在同一个JVM进程中，这样Operator间的数据传递就可以在进程内部完成而减少网络间的数据传递；由此想到`Chain All Operators Together`，这样就必须把`source/filter/sink`的并行度设置为相同的值；然而，这就让每个Task都持有一个Sink实例，同时因为`Slot Sharing`特性的存在，每个Container内部会运行多个Task，这就导致单个Container中存在多个Sink实例，特别是`Es Sink`这种较为重的Operator（内部维护的线程/缓存/状态较多）；`Es Sink`实例对象的增加导致了线程数的成倍增加，所有线程持有的`Stack Memory`总和也成倍增加，用于运行`Job Task`的Memory数量进一步减少，另一方面：每个Container所持有的2个CPU资源也很难支撑太多数量的线程高效运行。
@@ -209,7 +211,7 @@ Total: reserved=4028MB, committed=2766MB
 
 最后，将`Es Sink`并行度调整为2后问题得到彻底解决，至今Job已平稳运行了半个多月；
 
-*注：JVM很重要，清晰定位问题很重要；在最初的问题排查过程中，自己总试图从`heap/off-heap`寻找答案，甚至还将`heap/off-heap`占用的Memory进行拆分加和以计算是否存在使用过量的情况，耗费了不少精力。*
+*注：* JVM很重要，清晰定位问题很重要；在最初的问题排查过程中，自己总试图从`heap/off-heap`占用寻找答案，甚至还将`heap/off-heap`占用的Memory进行拆分加和以计算是否存在使用过量的情况，耗费了不少精力。
 
 
 ## Reference
