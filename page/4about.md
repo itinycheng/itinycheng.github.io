@@ -27,6 +27,7 @@ type: page
 
 [Apache Flink](https://flink.apache.org/) \| [Scala-lang](https://www.scala-lang.org/) \|
 [JDK11 Doc](https://docs.oracle.com/en/java/javase/11/docs/api/index.html) \|
+[Rust Book](https://doc.rust-lang.org/book/) \|
 
 ## Comments
 
