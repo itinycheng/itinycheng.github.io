@@ -11,7 +11,7 @@ author: tiny
 
 ## 前言
 
-当前团队 Flink 集群使用的版本是`1.7.2`，采用`per job on yarn`的运行模式，在近一年多的使用过程中碰到过多次内存相关的问题，比如：`beyond the 'PHYSICAL' memory limit... Killing container.`，总是感觉`Flink Streaming`在实际场景中的内存管理不够完美，会遇到各样的问题。在`Flink 1.10`版本 release 后，得知该版本对`TaskExecutor`的内存配置做了重新设计，内心有想要去了解的冲动，然而看过社区文档后又有了更多的疑问，比如：`TaskExecutor`对应的 JVM 进程在启动时只会有`-Xmx -Xms -XX:MaxDirectMemorySize`三个内存相关参数是通过 Flink 计算得出的，新增的细粒度配置能给 JVM 这三个启动参数带来多少变化，或是只是一个方便内存计算的工具，对于对 Flink 内存较为了解的人来讲，通过旧的内存配置参数可以完成与新配置一样的效果。
+当前团队 Flink 集群使用的版本是`1.7.2`，采用`per-job on yarn`的运行模式，在近一年多的使用过程中碰到过多次内存相关的问题，比如：`beyond the 'PHYSICAL' memory limit... Killing container.`，总是感觉`Flink Streaming`在实际场景中的内存管理不够完美，会遇到各样的问题。在`Flink 1.10`版本 release 后，了解到该版本对`TaskExecutor`的内存配置做了重新设计，内心有想要去了解的冲动，然而看过社区文档后又有了更多的疑问，比如：`TaskExecutor`对应的 JVM 进程在启动时只会有`-Xmx -Xms -XX:MaxDirectMemorySize`三个内存相关参数是通过 Flink 计算得出的，新增的细粒度配置能给 JVM 这三个启动参数带来多少变化，或是只是一个方便内存计算的工具，对于对 Flink 内存较为了解的人来讲，通过旧的内存配置参数可以完成与新配置一样的效果。
 
 起初这篇文章计划写`Flink Streaming`新/旧内存管理对比相关的内容，然而最近一个月大部分精力被工作和学习 Rust 消耗掉啦，到假期才算有时间开篇；之前在阅读内存管理代码同时参杂读了些任务启动相关代码，所以就扩展下之前计划写的文章范围：以描述`Flink Streaming`整个启动流程为主，辅以内存分配/管理相关代码分析。
 
@@ -26,6 +26,7 @@ author: tiny
 **脚本示例：**
 
 ```shell
+// Per-job model
 flink run -m yarn-cluster -yn 24 -ys 2 -ytm 6g -ynm $job_name -c $main_class -d -yq ./$job_jar $params
 ```
 
@@ -36,6 +37,8 @@ graph LR
 A(KafkaSource) --> B(MapOperator)
 B --> C(KafkaSink)
 ```
+
+// TODO aunch_container.sh
 
 -> StreamExecutionEnvironment.execute
 -> getStreamGraph
@@ -48,7 +51,7 @@ B --> C(KafkaSink)
 
 ```java
 
-// 源码调用流程
+// Client源码调用流程
 [1] -> CliFrontend::main(String[] args)
     -> -> CliFrontend.parseParameters
     -> -> -> CliFrontend.run
@@ -126,20 +129,65 @@ B --> C(KafkaSink)
   - 查看是否存在合适的`yarn queue`；
   - 校验/适配`ClusterSpecification`（利用集群`Yarn Container vCores/Memory`的配置）；
   - 调用`YarnClusterDescriptor.startAppMaster`启动`AppMaster`（下文详解）；
-  - 将`startAppMaster`获得的`JobManager`相关信息和`applicationId`写入`Configuration`；
+  - 将调用`startAppMaster`返回的`JobManager`相关信息和`applicationId`写入`Configuration`；
 
 - 调用`YarnClusterDescriptor.startAppMaster`：
 
+  - 从`Configuration`获取`FileSystem`配置信息，然后从`plugins`目录加载`jar`s
+    初始化`FileSystem`实例；
+  - 将`Zookeeper Namespace`写入`Configuration`对象，可以通过`high-availability.cluster-id`配置，默认是`applicationId`；
+  - 创建`YarnApplicationFileUploader`对象，然后将`log4j.properties`, `logback.xml`, `flink-conf.yaml`, `yarn-site.xml`, `UserJars`, `SystemJars`, `PluginsJars`, `JobGraph序列化`，`kerberos配置/认证`等文件上传到`hdfs:///user/$username/.flink/$applicationId/`目录下；
+  - 调用`JobManagerProcessUtils::processSpecFromConfigWithNewOptionToInterpretLegacyHeap`，从`Configuration`获取`Memory`配置并计算出`JobManager`所在进程的`Memory`分配数值，最终以`-Xmx, -Xms, -XX:MaxMetaspaceSize, -XX:MaxDirectMemorySize`形式用到`JVM`进程启动；此外，`Memory`计算对旧版配置`FLINK_JM_HEAP, jobmanager.heap.size, jobmanager.heap.mb`做了兼容处理；
+  - 调用`YarnClusterDescriptor.setupApplicationMasterContainer`创建`ContainerLaunchContext`（启动`Container`所需的信息集合）；
+  - 将`ApplicationName`, `ContainerLaunchContext`, `Resource`（向`ResourceManager`申请资源）, `CLASSPATH`, `Environment Variables`, `ApplicationType`, `yarn.application.node-label`, `yarn.tags`等信息封装到`ApplicationSubmissionContext`；此时，`ApplicationSubmissionContext`就封装了`ResourceManager`启动`ApplicationMaster`所需的所有信息；
+  - 为当前线程添加`提交任务失败`的回调函数，用于在提交任务失败后`kill Application & delete File uploaded to HDFS`；
+  - 调用`YarnClientImpl.submitApplication`将任务提交给`Yarn Client Api`处理；
+  - 轮训`YarnClientImpl.getApplicationReport`等待提交任务提交成功（`AppMaster`正常启动），最后返回任务状态`ApplicationReport`；
+
+**`YarnClientImpl.submitApplication`内通过调用`rmClient.submitApplication`向`Yarn Client`提交`Job`：**
+
+- 成员变量`YarnClientImpl.rmClient`通过调用`ConfiguredRMFailoverProxyProvider.getProxy`获取到，`YarnClientImpl.rmClient`实例是`ApplicationClientProtocolPBClientImpl`的代理对象，其内部通过`ProtoBuf + RpcEngine`提交任务到`Yarn Server`端；
+- 在`Yarn Server`端`ClientRMService.submitApplication`会收到所有来自`Yarn Client`的`Job`提交请求，执行后序的`AppMaster`启动操作；
+
+### [Server] 启动 JobManager
+
+```java
+// Server端在Container中启动JobManager的流程
+[1] -> YarnJobClusterEntrypoint::main(String[] args)
+    -> -> EnvironmentInformation.logEnvironmentInfo
+    -> -> SignalHandler.register
+    -> -> JvmShutdownSafeguard.installAsShutdownHook
+    -> -> YarnEntrypointUtils.logYarnEnvironmentInformation
+    -> -> YarnEntrypointUtils.loadConfiguration
+    -> -> ClusterEntrypoint::runClusterEntrypoint
+[2] -> -> -> YarnJobClusterEntrypoint.startCluster
+    -> -> -> -> PluginUtils.createPluginManagerFromRootFolder
+    -> -> -> -> ClusterEntrypoint.configureFileSystems
+    -> -> -> -> ClusterEntrypoint.installSecurityContext
+    -> -> -> -> ClusterEntrypoint.runCluster
+    -> -> -> -> -> ClusterEntrypoint.initializeServices
+    -> -> -> -> -> YarnJobClusterEntrypoint.createDispatcherResourceManagerComponentFactory
+    -> -> -> -> -> DefaultDispatcherResourceManagerComponentFactory.create
+
+```
+
+**1. 在`Per-job`模式下，`AppMaster`进程的启动入口是`YarnJobClusterEntrypoint.main`：**
+
+- 调用`EnvironmentInformation::logEnvironmentInfo`打印环境变量信息；
+- 调用`SignalHandler::register`注册`TERM, HUP, INT`等终止/退出信号处理（例如：`kill`）；
+- 从`System::getEnv`获取变量`PWD`，该目录为进程的启动目录，目录下包含进程启动所需的`jar, config, job.graph, launch_container.sh`等文件（通过`ln`创建的链接文件），`PWD`目录位置：`${yarn.nodemanager.local-dirs}/usercache/hadoop/appcache/${applicationId}/${containerId}`；
+- 调用`YarnEntrypointUtils::logYarnEnvironmentInformation`打印`Yarn`相关信息；
+- 调用`YarnEntrypointUtils.loadConfiguration`从`flink-conf.yaml`和`System.env`构建`Configuration`对象；
+- 创建`YarnJobClusterEntrypoint`对象，并为当前进程添加`shutDownHook`（在进程退出前进行删除本地文件的操作）；
+- 调用`ClusterEntrypoint::runClusterEntrypoint`，函数内部通过调用`YarnJobClusterEntrypoint.startCluster`做`AppMaster`启动操作，然后为`YarnJobClusterEntrypoint`对象注册了监控`Termination`的回调函数，用于打印进程结束的`exit code`等信息；
+
+**2. 调用`YarnJobClusterEntrypoint.startCluster`，依次执行：**
+
+- 调用`PluginUtils::createPluginManagerFromRootFolder`，将`plugin`的`name, jars`填充到`PluginDescriptor`，然后将`PluginDescriptor`和委托给`parent of plugin.classLoader`加载的`包名列表`封装到`DefaultPluginManager`；
+- 调用`ClusterEntrypoint.configureFileSystems`内部通过`ServiceLoader.load`，去加载并初始化`所有jars`（包括`common/plugin jars`）的`META-INF/services/`目录下的`FileSystemFactory`服务；
+- 调用`ClusterEntrypoint.installSecurityContext`，创建`ZooKeeperModule, HadoopModule, JaasModule`和`HadoopSecurityContext`对象并存放在`SecurityUtils`的成员变量，然后通过创建的`HadoopSecurityContext`对象触发执行`ClusterEntrypoint.runCluster`；从代码阅读来看：`installSecurityContext`的目的在于向运行环境添加必要的`用户权限`和`环境变量`配置；
+- `ClusterEntrypoint.runCluster`执行流程：
   - TODO
-
-- YarnClientImpl.submitApplication
-
-  - 成员变量`YarnClientImpl.rmClient`通过调用`ConfiguredRMFailoverProxyProvider.getProxy`获取到；
-  - TODO
-
-### [Server] 启动 AppMaster
-
-- org.apache.flink.yarn.entrypoint.YarnJobClusterEntrypoint
 
 ### [Server] 启动 TaskManager
 
