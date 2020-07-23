@@ -17,7 +17,7 @@ author: tiny
 
 ### JavaSE模块间依赖关系
 
-![module graph](../images/posts/module-graph.png)
+![module graph](/images/posts/module-graph.png)
 
 ### 语法详解
 

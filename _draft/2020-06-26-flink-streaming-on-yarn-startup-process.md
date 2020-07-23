@@ -11,9 +11,9 @@ author: tiny
 
 ## 前言
 
-当前团队 Flink 集群使用的版本是`1.7.2`，采用`per-job on yarn`的运行模式，在近一年多的使用过程中碰到过多次内存相关的问题，比如：`beyond the 'PHYSICAL' memory limit... Killing container.`，总是感觉`Flink Streaming`在实际场景中的内存管理不够完美，会遇到各样的问题。在`Flink 1.10`版本 release 后，了解到该版本对`TaskExecutor`的内存配置做了重新设计，内心有想要去了解的冲动，然而看过社区文档后又有了更多的疑问，比如：`TaskExecutor`对应的 JVM 进程在启动时只会有`-Xmx -Xms -XX:MaxDirectMemorySize`三个内存相关参数是通过 Flink 计算得出的，新增的细粒度配置能给 JVM 这三个启动参数带来多少变化，或是只是一个方便内存计算的工具，对于对 Flink 内存较为了解的人来讲，通过旧的内存配置参数可以完成与新配置一样的效果。
+当前团队`Flink`集群使用的版本是`1.7.2`，采用`per-job on yarn`的运行模式，在近一年多的使用过程中碰到过多次内存相关的问题，比如：`beyond the 'PHYSICAL' memory limit... Killing container.`，总是感觉`Flink Streaming`在实际场景中的内存管理不够完美，会遇到各样的问题。在`Flink 1.10`版本 release 后，了解到该版本对`TaskExecutor`的内存配置做了重新设计，内心有想要去了解的冲动，然而看过社区文档后又有了更多的疑问，比如：`TaskExecutor`对应的 JVM 进程在启动时只会有`-Xmx -Xms -XX:MaxDirectMemorySize`三个内存相关参数是通过`Flink`计算得出的，新增的细粒度配置能给`JVM`这三个启动参数带来多少变化，或是只是一个方便内存计算的工具，对于对`Flink`内存较为了解的人来讲，通过旧的内存配置参数可以完成与新配置一样的效果。
 
-起初这篇文章计划写`Flink Streaming`新/旧内存管理对比相关的内容，然而最近一个月大部分精力被工作和学习 Rust 消耗掉啦，到假期才算有时间开篇；之前在阅读内存管理代码同时参杂读了些任务启动相关代码，所以就扩展下之前计划写的文章范围：以描述`Flink Streaming`整个启动流程为主，辅以内存分配/管理相关代码分析。
+起初这篇文章计划写`Flink Streaming`新/旧内存管理对比相关的内容，然而之后一段时间的业余精力被学习`Rust`消耗掉啦，6 月底才算有时间开篇；之前在阅读内存管理代码同时参杂读了些任务启动相关代码，所以就扩展下之前计划写的文章范围：以描述`Flink Streaming`整个启动流程为主，辅以内存分配/管理相关代码分析，阅读的`Flink`代码版本定为最新版本`1.11.0`。
 
 ## 启动流程分析
 
@@ -30,7 +30,7 @@ author: tiny
 flink run -m yarn-cluster -yn 24 -ys 2 -ytm 6g -ynm $job_name -c $main_class -d -yq ./$job_jar $params
 ```
 
-**JobGraph：**
+**StreamGraph：**
 
 ```mermaid
 graph LR
@@ -38,14 +38,7 @@ A(KafkaSource) --> B(MapOperator)
 B --> C(KafkaSink)
 ```
 
-// TODO aunch_container.sh
-
--> StreamExecutionEnvironment.execute
--> getStreamGraph
--> getJobGraph
--> deployJobCluster(ClusterSpecification,appName,YarnJobClusterEntrypoint.class,jobGraph,detached)
--> [important] YarnClusterDescriptor.startAppMaster - setupApplicationMasterContainer
--> YarnClient.submitApplication
+// TODO launch_container.sh
 
 ### [Client] 初始化 Job
 
@@ -184,16 +177,31 @@ B --> C(KafkaSink)
 **2. 调用`YarnJobClusterEntrypoint.startCluster`，依次执行：**
 
 - 调用`PluginUtils::createPluginManagerFromRootFolder`，将`plugin`的`name, jars`填充到`PluginDescriptor`，然后将`PluginDescriptor`和委托给`parent of plugin.classLoader`加载的`包名列表`封装到`DefaultPluginManager`；
-- 调用`ClusterEntrypoint.configureFileSystems`内部通过`ServiceLoader.load`，去加载并初始化`所有jars`（包括`common/plugin jars`）的`META-INF/services/`目录下的`FileSystemFactory`服务；
+- 调用`ClusterEntrypoint.configureFileSystems`内部通过`Java SPI`去加载并初始化`所有jars`（包括`common/plugin jars`）的`META-INF/services/`目录下的`FileSystemFactory`服务；
 - 调用`ClusterEntrypoint.installSecurityContext`，创建`ZooKeeperModule, HadoopModule, JaasModule`和`HadoopSecurityContext`对象并存放在`SecurityUtils`的成员变量，然后通过创建的`HadoopSecurityContext`对象触发执行`ClusterEntrypoint.runCluster`；从代码阅读来看：`installSecurityContext`的目的在于向运行环境添加必要的`用户权限`和`环境变量`配置；
 - `ClusterEntrypoint.runCluster`执行流程：
-  - TODO
+  - 调用`ClusterEntrypoint.initializeServices`初始化多个服务模块；
+    - `commonRpcService`：`AkkaRpc`服务，处理本地和远程的服务调用请求；
+    - `haServices`：`ZooKeeperHaServices`服务，处理与`zookeeper`的交互请求，如`JobManager/ResourceManager`等组件的`leader`选举；
+    - `blobServer`：处理`Job BLOB文件`的/上传/下载/清除等操作，`BLOB`包括`Jar`，`RPC消息`等内容；
+    - `heartbeatServices`：管理`Job`各组件的心跳服务；
+    - `metricRegistry`：监控指标注册，持有`Job`各监控指标和`MetricReporter`s 信息；
+    - `processMetricGroup`：系统/进程监控指标组，包含`CPU`, `Memory`, `GC`, `ClassLoader`, `Network`, `Swap`等监控指标；
+    - `archivedExecutionGraphStore`：用于保存序列化的`ExecutionGraph`？
+  - 调用`YarnJobClusterEntrypoint.createDispatcherResourceManagerComponentFactory`创建工厂对象`DefaultDispatcherResourceManagerComponentFactory`，工厂对象用于创建`DispatcherResourceManagerComponent`对象，该对象的创建过程是`Job`启动的核心逻辑所在；另外提一下，`FileJobGraphRetriever`将本地文件`job.graph`反序列化为`JobGraph`；
+  - `DefaultDispatcherResourceManagerComponentFactory.create`执行流程：
+    - 创建并启动`Flink-Web-Dashboard`的`Rest`接口服务`WebMonitorEndpoint`；
+    - 创建并启动`YarnResourceManager`，负责`Job`的资源管理，如：申请/释放/记录；
+    - 创建并启动`MiniDispatcher`，在`Dispatcher`启动过程中会创建`JobManager`线程完成任务的启动，后序详述；
+    - 向 ZooKeeper 注册`ResourceManager`, `Dispatcher`的监听协调服务，用于服务的容错恢复，通过在`Zookeeper`中保持了一个锁文件来协调服务；
+    - 上述`WebMonitorEndpoint, YarnResourceManager, MiniDispatcher`三个服务在`ZooKeeper`下保存着各自的相关信息，并通过`ZooKeeperHaServices`保证服务高可用的；服务启动过程的代码实现是通过`AkkaRPC + 状态机`的设计模式实现的，在服务对象创建过程中注册生成`AkkaServer`，在服务启动过程中通过`AkkaRPC`调用不同`状态机函数`，最后回调`onStart`执行实际启动逻辑；启动逻辑较为复杂，需耐心翻阅，状态机默认状态是：`StoppedState.STOPPED`，`AkkaServer`创建逻辑在`AkkaRpcService.startServer`；详细代码逻辑在`Dispatcher`代码讲解阶段也会涉及到；
 
 ### [Server] 启动 TaskManager
 
-org.apache.flink.yarn.YarnTaskExecutorRunner
+// TODO
 
-1. onContainersAllocated
+1. YarnResourceManager.onContainersAllocated
+2. org.apache.flink.yarn.YarnTaskExecutorRunner
 
 ## 内存计算
 
