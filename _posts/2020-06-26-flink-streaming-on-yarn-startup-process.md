@@ -38,8 +38,6 @@ A(KafkaSource) --> B(MapOperator)
 B --> C(KafkaSink)
 ```
 
-// TODO launch_container.sh
-
 ### [Client] 初始化 Job
 
 ```java
@@ -96,7 +94,7 @@ B --> C(KafkaSink)
 - 调用`DataStream.addSink`创建`DataStreamSink`对象，并将其添加到`StreamExecutionEnvironment`的成员变量`transformations`列表中；
 - 最后调用`StreamExecutionEnvironment.execute`开始执行`Job`创建和任务提交；
 
-**`StreamExecutionEnvironment.execute`在`Client`端的代码执行流程：**
+**3. `StreamExecutionEnvironment.execute`在`Client`端的代码执行流程：**
 
 - 调用`StreamExecutionEnvironment.getStreamGraph`，先创建`StreamGraphGenerator`对象，然后调用`StreamGraphGenerator.generate`生成`StreamGraph`，生成`StreamGraph`流程如下：
 
@@ -107,7 +105,7 @@ B --> C(KafkaSink)
   - `StreamEdge`中包含它上下游`StreamNode`的`Id`值，数据传递规则`ShuffleMode`, `StreamPartitioner`等信息；
 
 - 调用`StreamExecutionEnvironment.execute(StreamGraph)`执行任务提交流程并等待任务状态返回；
-- 在`StreamExecutionEnvironment.executeAsync`内通过调用`DefaultExecutorServiceLoader.getExecutorFactory`检索`jar`s 的`META-INF.services`目录，加载适合的`ExecutorFactory`，当前`Job`可用的是`YarnJobClusterExecutorFactory`；
+- 在`StreamExecutionEnvironment.executeAsync`内通过调用`DefaultExecutorServiceLoader.getExecutorFactory`检索`jar`s 的`META-INF.services`目录，加载适合的`ExecutorFactory`（`Java SPI`），当前`Job`可用的是`YarnJobClusterExecutorFactory`；
 - 通过`YarnJobClusterExecutorFactory`获取`YarnJobClusterExecutor`，然后执行`YarnJobClusterExecutor.execute`：
   - 调用`PipelineExecutorUtils.getJobGraph`将`StreamGraph`转换为`JobGraph`，转换的重要逻辑在`StreamingJobGraphGenerator.createJobGraph`内，创建`JobGraph`的主要操作有：创建一个包有 32 位随机数的`JobID`；为`Graph`的每个顶点生成一个全局唯一的`hash`数（用户可通过`DataStream.uid`设置）；生成`JobVertex`，它是`Flink Task`的上层抽象，包含`Operators`, `invokableClass`, `SlotSharing`，`OperatorChaining`等信息，存放在`JobGraph`的成员变量`taskVertices`中；此外还有, `ExecutionConfig`, `SavepointConfig`, `JarPath`s, `Classpath`s 等信息；
   - 调用`YarnClusterClientFactory.getClusterSpecification`从`Configuration`中解析当前提交`Job`的`JobManager/TaskManager`的内存信息，用于校验`Yarn Cluster`是否有足够的资源分配给`Job`启动；
@@ -133,7 +131,7 @@ B --> C(KafkaSink)
   - 调用`JobManagerProcessUtils::processSpecFromConfigWithNewOptionToInterpretLegacyHeap`，从`Configuration`获取`Memory`配置并计算出`JobManager`所在进程的`Memory`分配数值，最终以`-Xmx, -Xms, -XX:MaxMetaspaceSize, -XX:MaxDirectMemorySize`形式用到`JVM`进程启动；此外，`Memory`计算对旧版配置`FLINK_JM_HEAP, jobmanager.heap.size, jobmanager.heap.mb`做了兼容处理；
   - 调用`YarnClusterDescriptor.setupApplicationMasterContainer`创建`ContainerLaunchContext`（启动`Container`所需的信息集合）；
   - 将`ApplicationName`, `ContainerLaunchContext`, `Resource`（向`ResourceManager`申请资源）, `CLASSPATH`, `Environment Variables`, `ApplicationType`, `yarn.application.node-label`, `yarn.tags`等信息封装到`ApplicationSubmissionContext`；此时，`ApplicationSubmissionContext`就封装了`ResourceManager`启动`ApplicationMaster`所需的所有信息；
-  - 为当前线程添加`提交任务失败`的回调函数，用于在提交任务失败后`kill Application & delete File uploaded to HDFS`；
+  - 为当前线程添加`提交任务失败`的回调函数，用于在提交任务失败后`kill Application & delete Files that have been uploaded to HDFS`；
   - 调用`YarnClientImpl.submitApplication`将任务提交给`Yarn Client Api`处理；
   - 轮训`YarnClientImpl.getApplicationReport`等待提交任务提交成功（`AppMaster`正常启动），最后返回任务状态`ApplicationReport`；
 
@@ -161,6 +159,33 @@ B --> C(KafkaSink)
     -> -> -> -> -> ClusterEntrypoint.initializeServices
     -> -> -> -> -> YarnJobClusterEntrypoint.createDispatcherResourceManagerComponentFactory
     -> -> -> -> -> DefaultDispatcherResourceManagerComponentFactory.create
+    -> -> -> -> -> -> JobRestEndpointFactory.createRestEndpoint -> MiniDispatcherRestEndpoint.start
+    -> -> -> -> -> -> YarnResourceManagerFactory.createResourceManager -> YarnResourceManager.start
+    -> -> -> -> -> -> ZooKeeperUtils.createLeaderRetrievalService -> ZooKeeperLeaderRetrievalService.start
+    -> -> -> -> -> -> DefaultDispatcherRunnerFactory.createDispatcherRunner
+    -> -> -> -> -> -> -> JobDispatcherLeaderProcessFactoryFactory.createFactory
+    -> -> -> -> -> -> -> DefaultDispatcherRunner::create
+    -> -> -> -> -> -> -> -> DispatcherRunnerLeaderElectionLifecycleManager::createFor
+    -> -> -> -> -> -> -> -> -> DispatcherRunnerLeaderElectionLifecycleManager::new -> ZooKeeperLeaderElectionService.start
+    -> -> -> -> -> -> -> -> -> -> ZooKeeperLeaderElectionService.isLeader
+    -> -> -> -> -> -> -> -> -> -> -> DefaultDispatcherRunner.grantLeadership
+    -> -> -> -> -> -> -> -> -> -> -> -> DefaultDispatcherRunner.startNewDispatcherLeaderProcess
+    -> -> -> -> -> -> -> -> -> -> -> -> -> JobDispatcherLeaderProcess.start -> AbstractDispatcherLeaderProcess.startInternal
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> JobDispatcherLeaderProcess.onStart
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> DefaultDispatcherGatewayServiceFactory.create
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> JobDispatcherFactory.createDispatcher (create AkkaServer)
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> MiniDispatcher.start (call AkkaServer to execute job start)
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> Dispatcher.onStart
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> DefaultDispatcherBootstrap.initialize -> AbstractDispatcherBootstrap.launchRecoveredJobGraphs
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> Dispatcher.runRecoveredJob
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> Dispatcher.runJob
+
+// 调用链太长，从`Dispatcher.runJob`新建
+[3] -> Dispatcher.runJob
+    -> -> Dispatcher.createJobManagerRunner
+    -> -> -> // TODO
+    -> -> Dispatcher.startJobManagerRunner
+    -> -> -> // TODO
 
 ```
 
@@ -183,7 +208,7 @@ B --> C(KafkaSink)
   - 调用`ClusterEntrypoint.initializeServices`初始化多个服务模块；
     - `commonRpcService`：`AkkaRpc`服务，处理本地和远程的服务调用请求；
     - `haServices`：`ZooKeeperHaServices`服务，处理与`zookeeper`的交互请求，如`JobManager/ResourceManager`等组件的`leader`选举；
-    - `blobServer`：处理`Job BLOB文件`的/上传/下载/清除等操作，`BLOB`包括`Jar`，`RPC消息`等内容；
+    - `blobServer`：处理`Job BLOB文件`的/上传/下载/清除等操作，`BLOB`包括`Jar`s，`RPC消息`等内容；
     - `heartbeatServices`：管理`Job`各组件的心跳服务；
     - `metricRegistry`：监控指标注册，持有`Job`各监控指标和`MetricReporter`s 信息；
     - `processMetricGroup`：系统/进程监控指标组，包含`CPU`, `Memory`, `GC`, `ClassLoader`, `Network`, `Swap`等监控指标；
@@ -192,10 +217,12 @@ B --> C(KafkaSink)
   - `DefaultDispatcherResourceManagerComponentFactory.create`执行流程：
     - 创建并启动`Flink-Web-Dashboard`的`Rest`接口服务`WebMonitorEndpoint`；
     - 创建并启动`YarnResourceManager`，负责`Job`的资源管理，如：申请/释放/记录；
-    - 创建并启动`MiniDispatcher`，在`Dispatcher`启动过程中会创建`JobManager`线程完成任务的启动，后序详述；
+    - 创建并启动`MiniDispatcher`，在`Dispatcher`启动过程中会创建`JobManager`线程完成任务的启动；
     - 向 ZooKeeper 注册`ResourceManager`, `Dispatcher`的监听协调服务，用于服务的容错恢复，通过在`Zookeeper`中保持了一个锁文件来协调服务；
-    - 上述`WebMonitorEndpoint, YarnResourceManager, MiniDispatcher`三个服务在`ZooKeeper`下保存着各自的相关信息，并通过`ZooKeeperHaServices`保证服务高可用的；服务启动过程的代码实现是通过`AkkaRPC + 状态机`的设计模式实现的，在服务对象创建过程中注册生成`AkkaServer`，在服务启动过程中通过`AkkaRPC`调用不同`状态机函数`，最后回调`onStart`执行实际启动逻辑；启动逻辑较为复杂，需耐心翻阅，状态机默认状态是：`StoppedState.STOPPED`，`AkkaServer`创建逻辑在`AkkaRpcService.startServer`；详细代码逻辑在`Dispatcher`代码讲解阶段也会涉及到；
+    - 上述`WebMonitorEndpoint, YarnResourceManager, MiniDispatcher`三个服务在`ZooKeeper`下保存着各自的相关信息，通过`ZooKeeperHaServices`保证服务的高可用；三个服务的启动过程是通过`AkkaRPC + 状态机`的设计模式实现的，在各服务对象创建过程中注册生成`AkkaServer`，在服务启动过程中通过`AkkaRPC`调用不同`状态机函数`，最后回调`onStart`执行实际的启动逻辑，完整的启动逻辑较为复杂，需耐心翻阅；状态机默认状态是：`StoppedState.STOPPED`，`AkkaServer`创建逻辑在`AkkaRpcService.startServer`内，另外，在`AkkaRpcService.startServer`内通过调用`AkkaRpcService.registerAkkaRpcActor`创建`AkkaRpcActor`，`AkkaRpcActor`为具体接收消息并执行`状态机`逻辑的入口，接收消息的处理逻辑在`AbstractActor.createReceive`内；
 
+**调用`Dispatcher.runJob`进入`JobManager`启动流程：**
+// TODO
 ### [Server] 启动 TaskManager
 
 // TODO
