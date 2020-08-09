@@ -183,9 +183,41 @@ B --> C(KafkaSink)
 // 调用链太长，从`Dispatcher.runJob`新建
 [3] -> Dispatcher.runJob
     -> -> Dispatcher.createJobManagerRunner
-    -> -> -> // TODO
+    -> -> -> DefaultJobManagerRunnerFactory.createJobManagerRunner
+    -> -> -> -> JobManagerRunnerImpl::new
+    -> -> -> -> -> DefaultJobMasterServiceFactory.createJobMasterService
+    -> -> -> -> -> -> JobMaster::new
     -> -> Dispatcher.startJobManagerRunner
-    -> -> -> // TODO
+[4] -> -> -> JobManagerRunnerImpl.start
+    -> -> -> -> ZooKeeperLeaderElectionService.start -> ZooKeeperLeaderElectionService.isLeader
+    -> -> -> -> -> JobManagerRunnerImpl.grantLeadership -> JobManagerRunnerImpl.verifyJobSchedulingStatusAndStartJobManager -> JobManagerRunnerImpl.startJobMaster
+    -> -> -> -> -> -> ZooKeeperRunningJobsRegistry.setJobRunning
+    -> -> -> -> -> -> JobMaster.start
+    -> -> -> -> -> -> -> JobMaster.startJobExecution
+    -> -> -> -> -> -> -> -> JobMaster.setNewFencingToken
+    -> -> -> -> -> -> -> -> JobMaster.startJobMasterServices
+    -> -> -> -> -> -> -> -> JobMaster.resetAndStartScheduler
+    -> -> -> -> -> -> -> -> -> DefaultJobManagerJobMetricGroupFactory.create
+    -> -> -> -> -> -> -> -> -> JobMaster.createScheduler -> DefaultSchedulerFactory.createInstance -> DefaultScheduler::new
+    -> -> -> -> -> -> -> -> -> JobMaster.startScheduling
+    -> -> -> -> -> -> -> -> -> -> SchedulerBase.registerJobStatusListener
+    -> -> -> -> -> -> -> -> -> -> SchedulerBase.startScheduling
+    -> -> -> -> -> -> -> -> -> -> -> SchedulerBase.registerJobMetrics
+    -> -> -> -> -> -> -> -> -> -> -> SchedulerBase.startAllOperatorCoordinators
+    -> -> -> -> -> -> -> -> -> -> -> DefaultScheduler.startSchedulingInternal
+    -> -> -> -> -> -> -> -> -> -> -> -> DefaultScheduler.prepareExecutionGraphForNgScheduling
+    -> -> -> -> -> -> -> -> -> -> -> -> EagerSchedulingStrategy.startScheduling -> EagerSchedulingStrategy.allocateSlotsAndDeploy   // stream job use EagerSchedulingStrategy as default Scheduler
+    -> -> -> -> -> -> -> -> -> -> -> -> -> DefaultScheduler.allocateSlotsAndDeploy    // explain ExecutionVertexID
+[5] -> -> -> -> -> -> -> -> -> -> -> -> -> -> DefaultScheduler.allocateSlots -> DefaultExecutionSlotAllocator.allocateSlotsFor -> DefaultExecutionSlotAllocator.allocateSlot -> NormalSlotProviderStrategy.allocateSlot
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> SchedulerImpl.allocateSlot -> SchedulerImpl.allocateSlotInternal -> SchedulerImpl.internalAllocateSlot -> SchedulerImpl.allocateSingleSlot -> SchedulerImpl.requestNewAllocatedSlot
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> SlotPoolImpl.requestNewAllocatedBatchSlot -> SlotPoolImpl.requestNewAllocatedSlotInternal -> SlotPoolImpl.requestSlotFromResourceManager
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> ResourceManager.requestSlot -> SlotManagerImpl.registerSlotRequest -> SlotManagerImpl.internalRequestSlot -> SlotManagerImpl.fulfillPendingSlotRequestWithPendingTaskManagerSlot -> SlotManagerImpl.allocateResource
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> ResourceActionsImpl.allocateResource -> YarnResourceManager.startNewWorker -> YarnResourceManager.requestYarnContainer -> AMRMClientAsyncImpl.addContainerRequest
+[6] -> -> -> -> -> -> -> -> -> -> -> -> -> -> DefaultScheduler.waitForAllSlotsAndDeploy -> DefaultScheduler.deployAll -> DefaultScheduler.deployOrHandleError -> DefaultScheduler.deployTaskSafe
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> DefaultExecutionVertexOperations.deploy -> ExecutionVertex.deploy -> Execution.deploy
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> TaskDeploymentDescriptorFactory.createDeploymentDescriptor
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> RpcTaskManagerGateway.submitTask
+    -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> TaskExecutor.submitTask [invoke TaskExecutor via RPC which created by calling JobMaster.registerTaskManager]
 
 ```
 
@@ -216,13 +248,34 @@ B --> C(KafkaSink)
   - 调用`YarnJobClusterEntrypoint.createDispatcherResourceManagerComponentFactory`创建工厂对象`DefaultDispatcherResourceManagerComponentFactory`，工厂对象用于创建`DispatcherResourceManagerComponent`对象，该对象的创建过程是`Job`启动的核心逻辑所在；另外提一下，`FileJobGraphRetriever`将本地文件`job.graph`反序列化为`JobGraph`；
   - `DefaultDispatcherResourceManagerComponentFactory.create`执行流程：
     - 创建并启动`Flink-Web-Dashboard`的`Rest`接口服务`WebMonitorEndpoint`；
-    - 创建并启动`YarnResourceManager`，负责`Job`的资源管理，如：申请/释放/记录；
+    - 创建并启动`YarnResourceManager`以及其内部服务`SlotManager`，负责`Job`的资源管理，如：申请/释放/记录；
     - 创建并启动`MiniDispatcher`，在`Dispatcher`启动过程中会创建`JobManager`线程完成任务的启动；
     - 向 ZooKeeper 注册`ResourceManager`, `Dispatcher`的监听协调服务，用于服务的容错恢复，通过在`Zookeeper`中保持了一个锁文件来协调服务；
     - 上述`WebMonitorEndpoint, YarnResourceManager, MiniDispatcher`三个服务在`ZooKeeper`下保存着各自的相关信息，通过`ZooKeeperHaServices`保证服务的高可用；三个服务的启动过程是通过`AkkaRPC + 状态机`的设计模式实现的，在各服务对象创建过程中注册生成`AkkaServer`，在服务启动过程中通过`AkkaRPC`调用不同`状态机函数`，最后回调`onStart`执行实际的启动逻辑，完整的启动逻辑较为复杂，需耐心翻阅；状态机默认状态是：`StoppedState.STOPPED`，`AkkaServer`创建逻辑在`AkkaRpcService.startServer`内，另外，在`AkkaRpcService.startServer`内通过调用`AkkaRpcService.registerAkkaRpcActor`创建`AkkaRpcActor`，`AkkaRpcActor`为具体接收消息并执行`状态机`逻辑的入口，接收消息的处理逻辑在`AbstractActor.createReceive`内；
 
-**调用`Dispatcher.runJob`进入`JobManager`启动流程：**
+**3. 调用`Dispatcher.runJob`进入`JobManager`启动流程：**
+
+- 调用`Dispatcher.createJobManagerRunner`创建`JobManagerRunnerImpl`, `JobMaster`对象，`JobMaster`代表了一个运行的`JobGraph`，在`JobMaster::new`过程中创建了`RpcServer`, `DefaultScheduler`, `SchedulerImpl`, `SlotPoolImpl`, `ExecutionGraph`, `CheckpointCoordinator`等重要对象，创建`ExecutionGraph`入口：`SchedulerBase.createExecutionGraph`；
+- 调用`Dispatcher.startJobManagerRunner`执行整个任务的提交流程：启动`JobManager`端各服务模块，申请`Slot`资源启动`TaskManager`，提交/执行`Task`等流程；
+
+**4. 从调用`JobManagerRunnerImpl.start`开始到`DefaultScheduler.allocateSlotsAndDeploy`结束**
+
+- 在这段代码调用区间内主要做了一些服务的启动，`Job`状态的变更和监听服务的添加，为`JobManager`添加监控指标；代码较简单，在此不一一说明；
+
+**5. 调用`DefaultScheduler.allocateSlots`进入资源申请流程：**
 // TODO
+find slot from existing resource, if don‘t find request resourceManager for a new resource
+AMRMClientAsyncImpl.CallbackHandlerThread // get Resource that have been allocated and call `YarnResourceManager.onContainersAllocated` to process TaskManager
+AMRMClientAsyncImpl.HeartbeatThread // invoke `AMRMClientImpl.allocate` periodically, ResourceManager will be called to allocate Resource
+YarnResourceManager.requestYarnContainer // put request of allocate Container to member variable `AMRMClientImpl.ask`
+
+**6. 调用`DefaultScheduler.waitForAllSlotsAndDeploy`进入`Task`发布流程**
+
+// TODO
+
+获取到的 container 资源存放在纳贡，以供给后序 slot 分配；
+start TaskManager and register it to JobManager
+
 ### [Server] 启动 TaskManager
 
 // TODO
@@ -231,5 +284,8 @@ B --> C(KafkaSink)
 2. org.apache.flink.yarn.YarnTaskExecutorRunner
 
 ## 内存计算
+
+- start command for TaskManager -> TaskExecutorProcessUtils.processSpecFromWorkerResourceSpec
+- resource request for TaskManager -> WorkerSpecContainerResourceAdapter.createAndMapContainerResource
 
 ## 参考文档

@@ -6,8 +6,8 @@ tags: 迁移 机房 云服务
 author: tiny
 ---
 
-- content
-  {:toc}
+* content
+{:toc}
 
 ## 概述
 
