@@ -6,8 +6,8 @@ tags: doris clickhouse tidb
 author: tiny
 ---
 
-- content
-  {:toc}
+* content
+{:toc}
 
 ## 系统对比
 
